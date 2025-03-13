@@ -3,7 +3,6 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,10 +13,7 @@ import (
 	"strings"
 )
 
-const (
-	VERSION     string = "v1.0.0-alpha.0"
-	NVMDIR_NAME string = ".go-nvm"
-)
+const VERSION string = "v1.0.0-alpha.0"
 
 var nvmDir = os.Getenv("NVMDIR")
 
@@ -168,15 +164,18 @@ func install(args []string) error {
 	}
 
 	dstDir := path.Join(nvmDir, "versions", entry.version)
-	if err := os.MkdirAll(dstDir, 0o755); err != nil {
-		if errors.Is(err, os.ErrExist) {
+	if s, err := os.Stat(dstDir); err == nil {
+		if s.IsDir() {
 			// TODO: check if the node version is ACTUALLY installed
 			// for now, we just assume so if the directory exists
-
 			return fmt.Errorf("node %s is already installed", entry.version)
 		}
-
+	} else if !os.IsNotExist(err) {
 		return err
+	} else {
+		if err := os.MkdirAll(dstDir, 0o755); err != nil {
+			panic(err)
+		}
 	}
 
 	if entry == nil {
