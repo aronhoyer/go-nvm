@@ -1,16 +1,36 @@
 package main
 
 import (
+	"archive/tar"
+	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"runtime"
 	"strings"
 )
 
-const VERSION string = "v1.0.0-alpha.0"
+const (
+	VERSION     string = "v1.0.0-alpha.0"
+	NVMDIR_NAME string = ".go-nvm"
+)
+
+var nvmDir = os.Getenv("NVMDIR")
+
+func init() {
+	if nvmDir == "" {
+		if home, err := os.UserHomeDir(); err != nil {
+			fmt.Fprintln(os.Stderr, "Error: failed to determine home directory")
+			fmt.Println("Try setting the NVMDIR environment variable in your shell profile")
+		} else {
+			nvmDir = path.Join(home, ".go-nvm")
+		}
+	}
+}
 
 func main() {
 	args := os.Args[1:]
@@ -139,7 +159,7 @@ func install(args []string) error {
 			// linear search because it's (probably) more likely than not that you'd want to install a version
 			// closer to head than tail
 			for _, e := range idx {
-				if strings.HasPrefix(e.version, "v"+args[1]) {
+				if strings.HasPrefix(e.version, "v"+args[0]) {
 					entry = &e
 					break
 				}
@@ -147,14 +167,128 @@ func install(args []string) error {
 		}
 	}
 
-	if entry == nil {
-		return fmt.Errorf("version %s not found", args[1])
-	}
+	dstDir := path.Join(nvmDir, "versions", entry.version)
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			// TODO: check if the node version is ACTUALLY installed
+			// for now, we just assume so if the directory exists
 
-	if err := downloadArtifact(entry.version); err != nil {
+			return fmt.Errorf("node %s is already installed", entry.version)
+		}
+
 		return err
 	}
 
+	if entry == nil {
+		return fmt.Errorf("version %s not found", args[0])
+	}
+
+	fmt.Printf("Installing Node %s...\n", entry.version)
+	p, err := downloadArtifact(entry.version)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Downloaded artifact %s\n", path.Base(p))
+
+	defer os.Remove(p)
+
+	fmt.Println("Extracting artifact...")
+
+	switch ext := path.Ext(p); ext {
+	case ".gz": // just assume .tar.gz
+		if err := extractGzipArtifact(p, dstDir); err != nil {
+			if err := os.Remove(dstDir); err != nil {
+				panic(err)
+			}
+
+			return err
+		}
+	case ".zip":
+		if err := extractZipArtifact(p, dstDir); err != nil {
+			if err := os.Remove(dstDir); err != nil {
+				panic(err)
+			}
+
+			return err
+		}
+	default:
+		return fmt.Errorf("compression algorithm %s not supported", ext)
+	}
+
+	if err := os.Symlink(path.Join(dstDir, "lib/node_modules/npm/bin/npm"), path.Join(dstDir, "bin/npm")); err != nil {
+		return err
+	}
+
+	if err := os.Symlink(path.Join(dstDir, "lib/node_modules/npm/bin/npx"), path.Join(dstDir, "bin/npx")); err != nil {
+		return err
+	}
+
+	if err := os.Symlink(path.Join(dstDir, "lib/node_modules/corepack/dist/corepack.js"), path.Join(dstDir, "bin/corepack")); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func extractGzipArtifact(src, dst string) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gzr, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
+
+	var tld string
+
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		if tld == "" {
+			tld = strings.Split(h.Name, "/")[0]
+		}
+
+		target := path.Join(dst, strings.TrimPrefix(h.Name, tld+"/"))
+
+		if target == dst {
+			continue
+		}
+
+		switch h.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, os.FileMode(h.Mode)); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			outFile, err := os.Create(target)
+			if err != nil {
+				return err
+			}
+			defer outFile.Close()
+
+			if _, err := io.Copy(outFile, tr); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func extractZipArtifact(src, dst string) error {
 	return nil
 }
 
@@ -203,38 +337,38 @@ func getSlug(v string) (string, error) {
 	return fmt.Sprintf("node-%s-%s-%s%s", v, ops, arch, ext), nil
 }
 
-func downloadArtifact(v string) error {
+func downloadArtifact(v string) (string, error) {
 	slug, err := getSlug(v)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	u, err := url.JoinPath("https://nodejs.org/dist", v, slug)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	r, err := http.Get(u)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if r.StatusCode >= 400 {
-		return fmt.Errorf("failed to download artifact %s: request failed with status %s", slug, r.Status)
+		return "", fmt.Errorf("failed to download artifact %s: request failed with status %s", slug, r.Status)
 	}
 
 	defer r.Body.Close()
 
-	f, err := os.Create(slug)
+	f, err := os.Create(path.Join(os.TempDir(), slug))
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	defer f.Close()
 
 	if _, err := io.Copy(f, r.Body); err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	return f.Name(), nil
 }
