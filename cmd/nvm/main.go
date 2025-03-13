@@ -122,6 +122,7 @@ func install(args []string) error {
 	var entry *indexEntry
 
 	if len(args) == 0 || args[0] == "current" {
+		entry = &idx[0]
 	} else {
 		switch args[0] {
 		case "help", "-h", "--help":
