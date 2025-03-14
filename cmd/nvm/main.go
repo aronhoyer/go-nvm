@@ -2,15 +2,19 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const VERSION string = "v1.0.0-alpha.0"
@@ -57,6 +61,11 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "use":
+		if err := use(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "Unsupported command %s\n", args[0])
 		fmt.Println(usage())
@@ -64,13 +73,91 @@ func main() {
 	}
 }
 
+func use(args []string) error {
+	var version string
+
+	if len(args) == 0 {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+
+		b, err := os.ReadFile(path.Join(cwd, ".nvmrc"))
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return fmt.Errorf("no .nvmrc file found in %s", cwd)
+			}
+
+			return err
+		}
+
+		version = strings.TrimSpace(string(b))
+	}
+
+	idx, err := getRemodeIndex()
+	if err != nil {
+		return err
+	}
+
+	switch v := args[0]; v {
+	case "help", "-h", "--help":
+		fmt.Println(useUsage())
+		return nil
+	case "lts":
+		for _, e := range idx {
+			if e.lts != "" {
+				version = e.version
+				break
+			}
+		}
+	case "current", "latest":
+		version = idx[0].version
+	default:
+		for _, entry := range idx {
+			if strings.HasPrefix(entry.version, "v"+strings.TrimPrefix(v, "v")) {
+				version = entry.version
+				break
+			}
+		}
+	}
+
+	if _, err := os.Stat(path.Join(nvmDir, "versions", version)); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			fmt.Printf("Node %s is not installed. Do you want to install it? [y/N] ", version)
+
+			r := bufio.NewReader(os.Stdin)
+			ans, err := r.ReadString('\n')
+			if err != nil {
+				return err
+			}
+
+			if strings.ToLower(strings.TrimSpace(ans)) == "y" {
+				return install([]string{version})
+			}
+		}
+	}
+
+	return nil
+}
+
+func useUsage() string {
+	return `Usage: nvm use [version] [options]
+
+Arguments:
+  version (optional)  Use specified Node version or ./.nvmrc if omitted
+
+Options:
+  -h, --help  Print help`
+}
+
 func usage() string {
 	return `Usage: nvm [command] [options]
 
 Commands:
-  version    Print nvm version
+  version  Print nvm version
   install  Install latest or the given version of Node
-  help       Print this message or the help of the given command
+  use      Specify which version of Node to use
+  help     Print this message or the help of the given command
 
 Options:
   -v, --version  Print nvm version
@@ -81,6 +168,8 @@ func usageOf(s string) (string, error) {
 	switch s {
 	case "i", "install":
 		return installUsage(), nil
+	case "use":
+		return useUsage(), nil
 	default:
 		return "", fmt.Errorf("command \"%s\" has no use", s)
 	}
@@ -88,8 +177,10 @@ func usageOf(s string) (string, error) {
 
 type indexEntry struct {
 	version, npm, lts string
+	date              time.Time
 }
 
+// TODO: should probably actually sort the []indexEntry
 func getRemodeIndex() ([]indexEntry, error) {
 	res, err := http.Get("https://nodejs.org/dist/index.tab")
 	if err != nil {
@@ -106,17 +197,27 @@ func getRemodeIndex() ([]indexEntry, error) {
 	var idx []indexEntry
 
 	for i := 1; i < len(idxLines); i++ {
-		idx = append(idx, parseIndexLine(idxLines[i]))
+		entry, err := parseIndexLine(idxLines[i])
+		if err != nil {
+			return nil, err
+		}
+
+		idx = append(idx, entry)
 	}
 
 	return idx, nil
 }
 
-func parseIndexLine(line string) indexEntry {
+func parseIndexLine(line string) (indexEntry, error) {
 	// version	date	files	npm	v8	uv	zlib	openssl	modules	lts	security
 	parts := strings.Fields(line)
 
 	version, npm, lts := parts[0], parts[3], parts[9]
+
+	date, err := time.Parse("2006-01-02", parts[1])
+	if err != nil {
+		return indexEntry{}, err
+	}
 
 	if npm == "-" {
 		npm = ""
@@ -126,7 +227,7 @@ func parseIndexLine(line string) indexEntry {
 		lts = ""
 	}
 
-	return indexEntry{version, npm, lts}
+	return indexEntry{version, npm, lts, date}, nil
 }
 
 func install(args []string) error {
@@ -155,12 +256,16 @@ func install(args []string) error {
 			// linear search because it's (probably) more likely than not that you'd want to install a version
 			// closer to head than tail
 			for _, e := range idx {
-				if strings.HasPrefix(e.version, "v"+args[0]) {
+				if strings.HasPrefix(e.version, "v"+strings.TrimPrefix(args[0], "v")) {
 					entry = &e
 					break
 				}
 			}
 		}
+	}
+
+	if entry == nil {
+		return fmt.Errorf("version %s not found", args[0])
 	}
 
 	dstDir := path.Join(nvmDir, "versions", entry.version)
@@ -170,16 +275,12 @@ func install(args []string) error {
 			// for now, we just assume so if the directory exists
 			return fmt.Errorf("node %s is already installed", entry.version)
 		}
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	} else {
 		if err := os.MkdirAll(dstDir, 0o755); err != nil {
 			panic(err)
 		}
-	}
-
-	if entry == nil {
-		return fmt.Errorf("version %s not found", args[0])
 	}
 
 	fmt.Printf("Installing Node %s...\n", entry.version)
@@ -215,6 +316,9 @@ func install(args []string) error {
 		return fmt.Errorf("compression algorithm %s not supported", ext)
 	}
 
+	fmt.Println("Artifact extracted to", dstDir)
+	fmt.Println("Linking additional executables...")
+
 	if err := os.Symlink(path.Join(dstDir, "lib/node_modules/npm/bin/npm"), path.Join(dstDir, "bin/npm")); err != nil {
 		return err
 	}
@@ -226,6 +330,8 @@ func install(args []string) error {
 	if err := os.Symlink(path.Join(dstDir, "lib/node_modules/corepack/dist/corepack.js"), path.Join(dstDir, "bin/corepack")); err != nil {
 		return err
 	}
+
+	// TODO: nvm use {entry.version}
 
 	return nil
 }
