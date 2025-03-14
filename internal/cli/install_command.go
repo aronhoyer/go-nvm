@@ -7,6 +7,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/aronhoyer/go-nvm/internal/env"
 	"github.com/aronhoyer/go-nvm/internal/node"
 )
 
@@ -14,6 +15,16 @@ func InstallCommand(args []string) error {
 	nvmDir := os.Getenv("NVMDIR")
 	if nvmDir == "" {
 		return errors.New("environment variable NVMDIR not set")
+	}
+
+	var useInstalledVersion bool
+
+	for i, arg := range args {
+		if arg == "-u" || arg == "--use" {
+			args = append(args[:i], args[max(i+1, len(args)-1):]...)
+			useInstalledVersion = true
+			break
+		}
 	}
 
 	idx, err := node.GetRemoteIndex()
@@ -60,50 +71,29 @@ func InstallCommand(args []string) error {
 		return fmt.Errorf("node %s is already installed", entry.Version)
 	}
 
-	nodeVersionInstallPath := path.Join(nvmDir, "versions", entry.Version)
-	if err := os.MkdirAll(nodeVersionInstallPath, 0o755); err != nil {
+	if err := node.Install(entry.Version); err != nil {
 		return err
 	}
 
-	fmt.Printf("Installing Node %s...\n", entry.Version)
-	artifact, err := node.DownloadArtifact(entry.Version)
-	if err != nil {
-		return err
+	dirEntries, _ := os.ReadDir(path.Join(nvmDir, "versions"))
+	fmt.Println(len(dirEntries) == 1)
+
+	if len(dirEntries) == 1 || useInstalledVersion {
+		if err := env.SetNodeVersion(entry.Version); err != nil {
+			return err
+		}
 	}
-
-	fmt.Printf("Downloaded artifact %s\n", path.Base(artifact.Name))
-
-	defer os.Remove(artifact.Name)
-
-	fmt.Println("Extracting artifact...")
-
-	if err := node.ExtractArtifact(artifact.Name, nodeVersionInstallPath); err != nil {
-		return err
-	}
-
-	fmt.Println("Artifact extracted to", nodeVersionInstallPath)
-	fmt.Println("Linking additional executables...")
-
-	if err := os.Symlink(path.Join(nodeVersionInstallPath, "lib/node_modules/npm/bin/npm"), path.Join(nodeVersionInstallPath, "bin/npm")); err != nil {
-		return err
-	}
-
-	if err := os.Symlink(path.Join(nodeVersionInstallPath, "lib/node_modules/npm/bin/npx"), path.Join(nodeVersionInstallPath, "bin/npx")); err != nil {
-		return err
-	}
-
-	if err := os.Symlink(path.Join(nodeVersionInstallPath, "lib/node_modules/corepack/dist/corepack.js"), path.Join(nodeVersionInstallPath, "bin/corepack")); err != nil {
-		return err
-	}
-
-	// TODO: set node version to downloaded version
 
 	return nil
 }
 
 func InstallCommandUsage() string {
-	return `Usage: nvm install [version]
+	return `Usage: nvm install [version] [options]
 
 Arguments:
-  version (optional)  The version of Node you want to install`
+  version (optional)  The version of Node you want to install
+
+Options:
+  -u, --use   Use this version after installing. If no other version of Node is installed, this option is implied
+  -h, --help  Print help`
 }

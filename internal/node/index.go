@@ -3,7 +3,6 @@ package node
 import (
 	"io"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 )
@@ -37,23 +36,7 @@ func GetRemoteIndex() ([]IndexEntry, error) {
 		idx = append(idx, entry)
 	}
 
-	sortIndex(&idx)
-
 	return idx, nil
-}
-
-func sortIndex(idx *[]IndexEntry) {
-	slices.SortFunc(*idx, func(a IndexEntry, b IndexEntry) int {
-		if a.Date.After(b.Date) {
-			return -1
-		}
-
-		if a.Date.Before(b.Date) {
-			return 1
-		}
-
-		return 0
-	})
 }
 
 func parseIndexLine(line string) (IndexEntry, error) {
