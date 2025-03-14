@@ -18,6 +18,7 @@
 # vendor/
 
 testdata/
+out/
 
 # Go workspace file
 go.work
