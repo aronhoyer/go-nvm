@@ -1,4 +1,4 @@
-module aronhoyer/nvm-go
+module github.com/aronhoyer/go-nvm
 
 go 1.24.0
 
