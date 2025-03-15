@@ -8,7 +8,7 @@ import (
 	"github.com/aronhoyer/go-nvm/internal/cli"
 )
 
-const VERSION string = "v1.0.0-alpha.0"
+const VERSION string = "development (unstable)"
 
 func init() {
 	if nvmDir := os.Getenv("NVMDIR"); nvmDir == "" {
