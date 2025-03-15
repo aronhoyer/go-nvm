@@ -60,11 +60,33 @@ func main() {
 			}
 		}
 	case "use":
-		switch args[1] {
-		case "help", "-h", "--help":
-			fmt.Println(cli.UseCommandUsage())
-		default:
-			if err := cli.UseCommand(args[1:]); err != nil {
+		if len(args) > 1 {
+			switch args[1] {
+			case "help", "-h", "--help":
+				fmt.Println(cli.UseCommandUsage())
+			default:
+				if err := cli.UseCommand(args[1:]); err != nil {
+					fmt.Fprintln(os.Stderr, "Error:", err)
+					os.Exit(1)
+				}
+			}
+		} else {
+			fmt.Fprintln(os.Stderr, "Error: risetnrisetnrisetrs")
+			os.Exit(1)
+		}
+	case "ls":
+		if len(args) > 1 {
+			switch args[1] {
+			case "help", "-h", "--help":
+				fmt.Println(cli.ListCommandUsage())
+			default:
+				if err := cli.ListCommand(args[1:]); err != nil {
+					fmt.Fprintln(os.Stderr, "Error:", err)
+					os.Exit(1)
+				}
+			}
+		} else {
+			if err := cli.ListCommand(nil); err != nil {
 				fmt.Fprintln(os.Stderr, "Error:", err)
 				os.Exit(1)
 			}

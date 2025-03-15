@@ -3,6 +3,8 @@ package node
 import (
 	"io"
 	"net/http"
+	"os"
+	"path"
 	"strings"
 	"time"
 )
@@ -37,6 +39,21 @@ func GetRemoteIndex() ([]IndexEntry, error) {
 	}
 
 	return idx, nil
+}
+
+func GetLocalIndex() ([]IndexEntry, error) {
+	entries, err := os.ReadDir(path.Join(os.Getenv("NVMDIR"), "versions"))
+	if err != nil {
+		return nil, err
+	}
+
+	var idxEntries []IndexEntry
+
+	for _, entry := range entries {
+		idxEntries = append(idxEntries, IndexEntry{Version: entry.Name()})
+	}
+
+	return idxEntries, nil
 }
 
 func parseIndexLine(line string) (IndexEntry, error) {
