@@ -50,10 +50,17 @@ func main() {
 			fmt.Println(cli.Usage())
 		}
 	case "i", "install":
-		switch args[1] {
-		case "help", "-h", "--help":
-			fmt.Println(cli.InstallCommandUsage())
-		default:
+		if len(args) > 1 {
+			switch args[1] {
+			case "help", "-h", "--help":
+				fmt.Println(cli.InstallCommandUsage())
+			default:
+				if err := cli.InstallCommand(args[1:]); err != nil {
+					fmt.Fprintln(os.Stderr, "Error:", err)
+					os.Exit(1)
+				}
+			}
+		} else {
 			if err := cli.InstallCommand(args[1:]); err != nil {
 				fmt.Fprintln(os.Stderr, "Error:", err)
 				os.Exit(1)
