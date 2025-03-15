@@ -33,6 +33,10 @@ func Install(version string) error {
 		return err
 	}
 
+	if err := os.Chmod(path.Join(nodeVersionInstallPath, "bin/node"), 0o744); err != nil {
+		return err
+	}
+
 	fmt.Println("Artifact extracted to", nodeVersionInstallPath)
 	fmt.Println("Linking additional executables...")
 
