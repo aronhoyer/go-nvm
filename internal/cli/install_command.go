@@ -76,7 +76,6 @@ func InstallCommand(args []string) error {
 	}
 
 	dirEntries, _ := os.ReadDir(path.Join(nvmDir, "versions"))
-	fmt.Println(len(dirEntries) == 1)
 
 	if len(dirEntries) == 1 || useInstalledVersion {
 		if err := env.SetNodeVersion(entry.Version); err != nil {
