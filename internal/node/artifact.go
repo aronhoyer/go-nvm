@@ -158,7 +158,7 @@ func extractGzipArtifact(src, dst string) error {
 				return err
 			}
 		case tar.TypeReg:
-			outFile, err := os.Create(target)
+			outFile, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE, os.FileMode(h.Mode))
 			if err != nil {
 				return err
 			}
