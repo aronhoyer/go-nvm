@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"path"
@@ -17,14 +18,28 @@ func InstallCommand(args []string) error {
 		return errors.New("environment variable NVMDIR not set")
 	}
 
-	var useInstalledVersion bool
+	s := flag.NewFlagSet("install", flag.ExitOnError)
 
-	for i, arg := range args {
-		if arg == "-u" || arg == "--use" {
-			args = append(args[:i], args[max(i+1, len(args)-1):]...)
-			useInstalledVersion = true
-			break
-		}
+	var (
+		helpFlag            bool
+		useInstalledVersion bool
+	)
+
+	s.BoolVar(&helpFlag, "help", false, "")
+	s.BoolVar(&helpFlag, "h", false, "")
+
+	s.BoolVar(&useInstalledVersion, "use", false, "")
+	s.BoolVar(&useInstalledVersion, "u", false, "")
+
+	s.Usage = func() {
+		fmt.Println(InstallCommandUsage())
+	}
+
+	s.Parse(args)
+
+	if helpFlag {
+		s.Usage()
+		return nil
 	}
 
 	idx, err := node.GetRemoteIndex()
@@ -34,26 +49,25 @@ func InstallCommand(args []string) error {
 
 	var entry *node.IndexEntry
 
-	if len(args) == 0 || args[0] == "current" {
+	switch v := s.Arg(0); v {
+	case "", "current":
 		entry = &idx[0]
-	} else {
-		switch args[0] {
-		case "lts":
-			// install latest lts
-			for _, e := range idx {
-				if e.LTS != "" {
-					entry = &e
-					break
-				}
+	case "lts":
+		for _, e := range idx {
+			if e.LTS != "" {
+				entry = &e
+				break
 			}
-		default:
-			// linear search because it's (probably) more likely than not that you'd want to install a version
-			// closer to head than tail
-			for _, e := range idx {
-				if strings.HasPrefix(e.Version, "v"+strings.TrimPrefix(args[0], "v")) {
-					entry = &e
-					break
-				}
+		}
+	default:
+		if !strings.HasPrefix(v, "v") {
+			v = "v" + v
+		}
+
+		for _, e := range idx {
+			if strings.HasPrefix(e.Version, v) {
+				entry = &e
+				break
 			}
 		}
 	}
