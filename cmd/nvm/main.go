@@ -17,7 +17,7 @@ func init() {
 			fmt.Fprintln(os.Stderr, "Error: failed to determine home directory")
 			fmt.Println("Try setting the NVMDIR environment variable in your shell profile")
 		} else {
-			os.Setenv("NVMDIR", path.Join(home, ".go-nvm"))
+			os.Setenv("NVMDIR", path.Join(home, ".nvm"))
 		}
 	}
 
