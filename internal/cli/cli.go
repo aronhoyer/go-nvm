@@ -3,7 +3,7 @@ package cli
 import "path"
 
 type Cli struct {
-	nvmDir, nvmBin, versionsDir string
+	nvmDirPath, nvmBinPath, nvmVersionsPath string
 }
 
 func New(nvmDir string) *Cli {

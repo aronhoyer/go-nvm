@@ -2,7 +2,7 @@ package cli
 
 import "fmt"
 
-func Usage() string {
+func (cli *Cli) Usage() string {
 	return `Usage: nvm [command] [options]
 
 Commands:
@@ -17,7 +17,7 @@ Options:
   -h, --help     Print help`
 }
 
-func UsageOf(s string) (string, error) {
+func (cli *Cli) UsageOf(s string) (string, error) {
 	switch s {
 	case "i", "install":
 		return InstallCommandUsage(), nil

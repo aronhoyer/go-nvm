@@ -8,7 +8,7 @@ import (
 	"github.com/aronhoyer/go-nvm/internal/node"
 )
 
-func ListCommand(args []string) error {
+func (cli *Cli) ListCommand(args []string) error {
 	var (
 		idx []node.IndexEntry
 		err error
@@ -57,7 +57,7 @@ func printIndex(idx []node.IndexEntry) {
 	}
 }
 
-func ListCommandUsage() string {
+func (cli *Cli) ListCommandUsage() string {
 	return `Usage: nvm ls [options]
 
 Options:

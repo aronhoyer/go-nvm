@@ -13,12 +13,7 @@ import (
 	"github.com/aronhoyer/go-nvm/internal/node"
 )
 
-func UseCommand(args []string) error {
-	nvmDir := os.Getenv("NVMDIR")
-	if nvmDir == "" {
-		return errors.New("environment variable NVMDIR not defined")
-	}
-
+func (cli *Cli) UseCommand(args []string) error {
 	var version string
 
 	if len(args) == 0 {
@@ -91,7 +86,7 @@ func UseCommand(args []string) error {
 	return nil
 }
 
-func UseCommandUsage() string {
+func (cli *Cli) UseCommandUsage() string {
 	return `Usage: nvm use [version] [options]
 
 Arguments:

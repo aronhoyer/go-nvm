@@ -41,7 +41,7 @@ func main() {
 	c := cli.New(nvmDirPath)
 
 	flag.Usage = func() {
-		fmt.Println(cli.Usage())
+		fmt.Println(c.Usage())
 	}
 
 	if helpFlag {
@@ -58,10 +58,7 @@ func main() {
 	case "version":
 		fmt.Println(VERSION)
 	case "help":
-		s := flag.NewFlagSet("help", flag.ExitOnError)
-		s.Parse(flag.Args()[1:])
-
-		if u, err := cli.UsageOf(s.Arg(0)); err != nil {
+		if u, err := c.UsageOf(flag.Arg(1)); err != nil {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 			flag.Usage()
 			os.Exit(1)
@@ -77,9 +74,9 @@ func main() {
 		if len(flag.Args()) > 1 {
 			switch flag.Arg(1) {
 			case "help", "-h", "--help":
-				fmt.Println(cli.UseCommandUsage())
+				fmt.Println(c.UseCommandUsage())
 			default:
-				if err := cli.UseCommand(flag.Args()[1:]); err != nil {
+				if err := c.UseCommand(flag.Args()[1:]); err != nil {
 					fmt.Fprintln(os.Stderr, "Error:", err)
 					os.Exit(1)
 				}
@@ -92,22 +89,22 @@ func main() {
 		if len(flag.Args()) > 1 {
 			switch flag.Arg(1) {
 			case "help", "-h", "--help":
-				fmt.Println(cli.ListCommandUsage())
+				fmt.Println(c.ListCommandUsage())
 			default:
-				if err := cli.ListCommand(flag.Args()[1:]); err != nil {
+				if err := c.ListCommand(flag.Args()[1:]); err != nil {
 					fmt.Fprintln(os.Stderr, "Error:", err)
 					os.Exit(1)
 				}
 			}
 		} else {
-			if err := cli.ListCommand(nil); err != nil {
+			if err := c.ListCommand(nil); err != nil {
 				fmt.Fprintln(os.Stderr, "Error:", err)
 				os.Exit(1)
 			}
 		}
 	default:
 		fmt.Fprintf(os.Stderr, "Unsupported command %s\n", flag.Arg(0))
-		fmt.Println(cli.Usage())
+		fmt.Println(c.Usage())
 		os.Exit(1)
 	}
 }

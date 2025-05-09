@@ -1,23 +1,16 @@
 package cli
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"path"
 	"strings"
 
 	"github.com/aronhoyer/go-nvm/internal/env"
 	"github.com/aronhoyer/go-nvm/internal/node"
 )
 
-func InstallCommand(args []string) error {
-	nvmDir := os.Getenv("NVMDIR")
-	if nvmDir == "" {
-		return errors.New("environment variable NVMDIR not set")
-	}
-
+func (cli *Cli) InstallCommand(args []string) error {
 	s := flag.NewFlagSet("install", flag.ExitOnError)
 
 	var (
@@ -89,7 +82,7 @@ func InstallCommand(args []string) error {
 		return err
 	}
 
-	dirEntries, _ := os.ReadDir(path.Join(nvmDir, "versions"))
+	dirEntries, _ := os.ReadDir(cli.nvmVersionsPath)
 
 	if len(dirEntries) == 1 || useInstalledVersion {
 		if err := env.SetNodeVersion(entry.Version); err != nil {
