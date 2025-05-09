@@ -11,18 +11,16 @@ import (
 
 const VERSION string = "development (unstable)"
 
+var nvmDirPath string
+
 func init() {
-	if nvmDir := os.Getenv("NVMDIR"); nvmDir == "" {
+	if nvmDirPath = os.Getenv("NVMDIR"); nvmDirPath == "" {
 		if home, err := os.UserHomeDir(); err != nil {
 			fmt.Fprintln(os.Stderr, "Error: failed to determine home directory")
-			fmt.Println("Try setting the NVMDIR environment variable in your shell profile")
+			fmt.Println("Try setting the NVMDIR environment variable in your shell's profile")
 		} else {
 			os.Setenv("NVMDIR", path.Join(home, ".nvm"))
 		}
-	}
-
-	if nvmBin := os.Getenv("NVMBIN"); nvmBin == "" {
-		os.Setenv("NVMBIN", path.Join(os.Getenv("NVMDIR"), "bin"))
 	}
 }
 
@@ -39,6 +37,8 @@ func main() {
 	flag.BoolVar(&versionFlag, "V", false, "")
 
 	flag.Parse()
+
+	c := cli.New(nvmDirPath)
 
 	flag.Usage = func() {
 		fmt.Println(cli.Usage())
@@ -69,7 +69,7 @@ func main() {
 			fmt.Println(u)
 		}
 	case "i", "install":
-		if err := cli.InstallCommand(flag.Args()[1:]); err != nil {
+		if err := c.InstallCommand(flag.Args()[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 			os.Exit(1)
 		}
