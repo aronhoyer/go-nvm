@@ -15,6 +15,20 @@ type IndexEntry struct {
 }
 
 func GetRemoteIndex() ([]IndexEntry, error) {
+	// Although Node ships a JSON distro index, we prefer TSV for a few reasons. Chief among them being that parsing
+	// TSV is about **10 times faster**. Literally.
+	//
+	// In controlled benchmarks, the below TSV parser cleared 1000 iterations in ~200ms, whereas the equivalent JSON
+	// parsing (using encoding/json) dragged on for ~2 entire seconds (same number of iterations, same data).
+	//
+	// So yeah... just don't parse JSON. It's slow, it's bloated, and it'll waste your CPU cycles validating curly
+	// braces like it's the highlight of your runtime.
+	//
+	// Additionally, and get this, the `lts` field in Node's JSON distribution index can be **either** boolean or
+	// string. Slowing down JSON parsing EVEN FURTHER.
+	//
+	// Long live raw data.
+
 	res, err := http.Get("https://nodejs.org/dist/index.tab")
 	if err != nil {
 		return nil, err
