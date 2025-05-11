@@ -1,13 +1,13 @@
-package cli
+package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"path"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/aronhoyer/go-nvm/internal/node"
 )
 
 type Value interface {
@@ -82,25 +82,17 @@ type Command struct {
 	Version     string
 	Aliases     []string
 	Description string
-	Usage       string
+	Usage       func()
 	Flags       []Flag
 	Commands    []*Command
 	Run         func(args Args, flags map[string]Flag) error
 }
 
-func (cmd *Command) exec(args []string) {
-	var hasHelpFlag bool
+func (cmd *Command) Exec(args []string) {
+	cmd.Flags = append(cmd.Flags, NewBoolFlagP("help", "h", false, "Print help"))
 
-	for _, flag := range cmd.Flags {
-		long, _ := flag.Name()
-		if long == "help" {
-			hasHelpFlag = true
-			break
-		}
-	}
-
-	if !hasHelpFlag {
-		cmd.Flags = append(cmd.Flags, NewBoolFlagP("help", "h", false, "Print help"))
+	if cmd.Usage == nil {
+		cmd.Usage = cmd.defaultUsage
 	}
 
 	var arg string
@@ -110,15 +102,13 @@ func (cmd *Command) exec(args []string) {
 
 	switch arg {
 	case "-h", "--help":
-		if cmd.Description != "" {
-			fmt.Println(cmd.Description + "\n")
-		}
-		cmd.printUsage()
+		fmt.Println(cmd.Description + "\n")
+		cmd.Usage()
 		return
 	default:
 		for _, sub := range cmd.Commands {
 			if sub.Name == arg || slices.Contains(sub.Aliases, arg) {
-				sub.exec(args[1:])
+				sub.Exec(args[1:])
 				return
 			}
 		}
@@ -151,7 +141,7 @@ func (cmd *Command) exec(args []string) {
 
 			if !found {
 				fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m invalid option: %s\n\n", arg)
-				cmd.printUsage()
+				cmd.Usage()
 				os.Exit(64)
 			}
 		} else {
@@ -166,38 +156,23 @@ func (cmd *Command) exec(args []string) {
 		}
 	}
 
-	if cmd.Run != nil {
-		if err := cmd.Run(args, flags); err != nil {
-			fmt.Fprintln(os.Stderr, "\x1b[1;31mError:\x1b[0m", err)
-			var exitErr ExitCode
-			if errors.As(err, &exitErr) {
-				os.Exit(exitErr.Code())
-			} else {
-				fmt.Println("hello?")
-				os.Exit(ExitCodeSoftware.Code())
-			}
-		}
+	if arg == "" && cmd.Run != nil {
+		cmd.Run(args, flags)
 	} else if arg != "" {
 		fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m invalid command: %s\n\n", arg)
-		cmd.printUsage()
-		os.Exit(ExitCodeUsage.Code())
+		cmd.Usage()
+		os.Exit(64)
 	}
 }
 
-func (cmd *Command) printUsage() {
-	fmt.Print("\x1b[1mUsage:\x1b[0m ")
+func (cmd *Command) defaultUsage() {
+	fmt.Printf("\x1b[1mUsage:\x1b[0m %s", cmd.Name)
 
-	if cmd.Usage != "" {
-		fmt.Print(cmd.Usage)
-	} else {
-		fmt.Printf("%s", cmd.Name)
-
-		if len(cmd.Commands) > 0 {
-			fmt.Print(" <COMMAND>")
-		}
-		if len(cmd.Flags) > 0 {
-			fmt.Print(" [OPTIONS]")
-		}
+	if len(cmd.Commands) > 0 {
+		fmt.Print(" <COMMAND>")
+	}
+	if len(cmd.Flags) > 0 {
+		fmt.Print(" [OPTIONS]")
 	}
 
 	fmt.Print("\n")
@@ -252,54 +227,71 @@ func (cmd *Command) printUsage() {
 	}
 }
 
-type Cli struct {
-	nvmDir  string
-	Version string
-	RootCmd *Command
-}
+func main() {
+	nvm := &Command{
+		Name:        "nvm",
+		Description: "Manage Node.js versions",
+		Commands: []*Command{
+			{
+				Name:        "install",
+				Aliases:     []string{"i"},
+				Description: "Install Node version",
+				Flags: []Flag{
+					NewBoolFlagP("use", "u", false, "Use version after install"),
+				},
+				Run: func(args Args, flags map[string]Flag) error {
+					idx, err := node.GetRemoteIndex()
+					if err != nil {
+						fmt.Fprintln(os.Stderr, "\x1b[1;31mError:\x1b[0m", err)
+						os.Exit(69)
+					}
 
-func New(nvmDir string, rootCmd *Command) *Cli {
-	if rootCmd == nil {
-		panic("must provide a root command")
+					var version string
+
+					switch v := args.Get(0); v {
+					case "", "latest":
+						version = idx[0].Version
+					case "lts":
+						for _, entry := range idx {
+							if entry.LTS != "" {
+								version = entry.Version
+								break
+							}
+						}
+					default:
+						if !strings.HasPrefix(v, "v") {
+							v = "v" + v
+						}
+
+						for _, entry := range idx {
+							if strings.HasPrefix(entry.Version, v) {
+								version = entry.Version
+								break
+							}
+						}
+					}
+
+					fmt.Println("installing Node", version)
+					return nil
+				},
+			},
+			{
+				Name:        "ls",
+				Description: "List version",
+				Flags: []Flag{
+					NewBoolFlagP("remote", "r", false, "List remote version"),
+				},
+			},
+			{
+				Name:        "rm",
+				Description: "Uninstall a version",
+			},
+			{
+				Name:        "use",
+				Description: "Activate an installed version",
+			},
+		},
 	}
 
-	return &Cli{
-		nvmDir:  nvmDir,
-		RootCmd: rootCmd,
-	}
-}
-
-func (c *Cli) RootPath() string {
-	return c.nvmDir
-}
-
-func (c *Cli) BinPath() string {
-	return path.Join(c.nvmDir, "bin")
-}
-
-func (c *Cli) VersionsDirPath() string {
-	return path.Join(c.nvmDir, "versions")
-}
-
-func (c *Cli) Exec() {
-	c.RootCmd.Flags = append(c.RootCmd.Flags, NewBoolFlagP("help", "h", false, "Print help"))
-	c.RootCmd.Flags = append(c.RootCmd.Flags, NewBoolFlagP("version", "V", false, "Print version"))
-
-	args := os.Args[1:]
-
-	if len(args) == 0 {
-		c.RootCmd.printUsage()
-		return
-	}
-
-	if args[0] == "-V" || args[0] == "--version" {
-		fmt.Printf("%s %s\n", c.RootCmd.Name, c.RootCmd.Version)
-		return
-	}
-
-	c.RootCmd.exec(args)
-}
-
-func (c *Cli) AddCommand(cmd *Command) {
-	c.RootCmd.Commands = append(c.RootCmd.Commands, cmd)
+	nvm.Exec(os.Args[1:])
 }

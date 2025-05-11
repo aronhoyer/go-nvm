@@ -82,7 +82,7 @@ func (cli *Cli) InstallCommand(args []string) error {
 		return err
 	}
 
-	dirEntries, _ := os.ReadDir(cli.nvmVersionsPath)
+	dirEntries, _ := os.ReadDir(cli.VersionsDirPath())
 
 	if len(dirEntries) == 1 || useInstalledVersion {
 		if err := env.SetNodeVersion(entry.Version); err != nil {

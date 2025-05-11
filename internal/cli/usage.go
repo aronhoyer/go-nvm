@@ -22,9 +22,9 @@ func (cli *Cli) UsageOf(s string) (string, error) {
 	case "i", "install":
 		return InstallCommandUsage(), nil
 	case "use":
-		return UseCommandUsage(), nil
+		return "", nil
 	case "ls":
-		return ListCommandUsage(), nil
+		return "", nil
 	default:
 		return "", fmt.Errorf("command \"%s\" has no use", s)
 	}

@@ -1,12 +1,13 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/aronhoyer/go-nvm/internal/cli"
+	"github.com/aronhoyer/go-nvm/internal/node"
 )
 
 const VERSION string = "development (unstable)"
@@ -25,86 +26,75 @@ func init() {
 }
 
 func main() {
-	var (
-		helpFlag    bool
-		versionFlag bool
-	)
+	c := cli.New(nvmDirPath, &cli.Command{
+		Name:        "nvm",
+		Description: "Manage Node.js versions",
+		Commands: []*cli.Command{
+			{
+				Name:        "install",
+				Aliases:     []string{"i"},
+				Description: "Install a Node version",
+				Usage:       "install [VERSION] [OPTIONS]",
+				Flags: []cli.Flag{
+					cli.NewBoolFlagP("use", "u", false, "Activate installed version after install"),
+				},
+				Run: func(args cli.Args, flags map[string]cli.Flag) error {
+					idx, err := node.GetRemoteIndex()
+					if err != nil {
+						return fmt.Errorf("%w: unable to retrieve node distribution index: %s", cli.ExitCodeUnavailable, err)
+					}
 
-	flag.BoolVar(&helpFlag, "help", false, "")
-	flag.BoolVar(&helpFlag, "h", false, "")
+					var entry *node.IndexEntry
 
-	flag.BoolVar(&versionFlag, "version", false, "")
-	flag.BoolVar(&versionFlag, "V", false, "")
+					switch v := args.Get(0); v {
+					case "", "latest":
+						entry = &(idx[0])
+					case "lts":
+						for _, e := range idx {
+							if e.LTS != "" {
+								entry = &e
+								break
+							}
+						}
+					default:
+						if !strings.HasPrefix(v, "v") {
+							v = "v" + v
+						}
 
-	flag.Parse()
+						for _, e := range idx {
+							if strings.HasPrefix(e.Version, v) {
+								entry = &e
+								break
+							}
+						}
+					}
 
-	c := cli.New(nvmDirPath)
+					if entry == nil {
+						return fmt.Errorf("%w: no such version: %s", cli.ExitCodeUsage, args.Get(0))
+					}
 
-	flag.Usage = func() {
-		fmt.Println(c.Usage())
-	}
+					fmt.Println("installing node", entry.Version)
 
-	if helpFlag {
-		flag.Usage()
-		return
-	}
+					return nil
+				},
+			},
+			{
+				Name:        "remove",
+				Aliases:     []string{"rm"},
+				Description: "Remove a Node version",
+				Usage:       "(rm|remove) <VERSION>",
+				Run: func(args cli.Args, flags map[string]cli.Flag) error {
+					if args.Get(0) == "" {
+						return cli.ExitCodeUsage
+					}
 
-	if versionFlag {
-		fmt.Println(VERSION)
-		return
-	}
+					fmt.Println("removing node", args.Get(0))
 
-	switch flag.Arg(0) {
-	case "version":
-		fmt.Println(VERSION)
-	case "help":
-		if u, err := c.UsageOf(flag.Arg(1)); err != nil {
-			fmt.Fprintln(os.Stderr, "Error:", err)
-			flag.Usage()
-			os.Exit(1)
-		} else {
-			fmt.Println(u)
-		}
-	case "i", "install":
-		if err := c.InstallCommand(flag.Args()[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, "Error:", err)
-			os.Exit(1)
-		}
-	case "use":
-		if len(flag.Args()) > 1 {
-			switch flag.Arg(1) {
-			case "help", "-h", "--help":
-				fmt.Println(c.UseCommandUsage())
-			default:
-				if err := c.UseCommand(flag.Args()[1:]); err != nil {
-					fmt.Fprintln(os.Stderr, "Error:", err)
-					os.Exit(1)
-				}
-			}
-		} else {
-			fmt.Fprintln(os.Stderr, "Error: risetnrisetnrisetrs")
-			os.Exit(1)
-		}
-	case "ls":
-		if len(flag.Args()) > 1 {
-			switch flag.Arg(1) {
-			case "help", "-h", "--help":
-				fmt.Println(c.ListCommandUsage())
-			default:
-				if err := c.ListCommand(flag.Args()[1:]); err != nil {
-					fmt.Fprintln(os.Stderr, "Error:", err)
-					os.Exit(1)
-				}
-			}
-		} else {
-			if err := c.ListCommand(nil); err != nil {
-				fmt.Fprintln(os.Stderr, "Error:", err)
-				os.Exit(1)
-			}
-		}
-	default:
-		fmt.Fprintf(os.Stderr, "Unsupported command %s\n", flag.Arg(0))
-		fmt.Println(c.Usage())
-		os.Exit(1)
-	}
+					return nil
+				},
+			},
+		},
+	})
+
+	c.Exec()
 }
