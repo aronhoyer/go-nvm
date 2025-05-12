@@ -4,14 +4,11 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path"
 	"strings"
-	"time"
 )
 
 type IndexEntry struct {
-	Version, NPM, LTS string
-	Date              time.Time
+	Version, LTS string
 }
 
 func GetRemoteIndex() ([]IndexEntry, error) {
@@ -55,8 +52,8 @@ func GetRemoteIndex() ([]IndexEntry, error) {
 	return idx, nil
 }
 
-func GetLocalIndex() ([]IndexEntry, error) {
-	entries, err := os.ReadDir(path.Join(os.Getenv("NVMDIR"), "versions"))
+func GetLocalIndex(idxPath string) ([]IndexEntry, error) {
+	entries, err := os.ReadDir(idxPath)
 	if err != nil {
 		return nil, err
 	}
@@ -74,20 +71,11 @@ func parseIndexLine(line string) (IndexEntry, error) {
 	// version	date	files	npm	v8	uv	zlib	openssl	modules	lts	security
 	parts := strings.Fields(line)
 
-	version, npm, lts := parts[0], parts[3], parts[9]
-
-	date, err := time.Parse("2006-01-02", parts[1])
-	if err != nil {
-		return IndexEntry{}, err
-	}
-
-	if npm == "-" {
-		npm = ""
-	}
+	version, lts := parts[0], parts[9]
 
 	if lts == "-" {
 		lts = ""
 	}
 
-	return IndexEntry{version, npm, lts, date}, nil
+	return IndexEntry{version, lts}, nil
 }
