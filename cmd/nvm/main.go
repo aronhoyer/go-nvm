@@ -42,7 +42,7 @@ func main() {
 		Name:        "install",
 		Aliases:     []string{"i"},
 		Description: "Install a Node version",
-		Usage:       "install [VERSION] [OPTIONS]",
+		Usage:       "nvm {i,install} [VERSION] [OPTIONS]",
 		Flags: []cli.Flag{
 			cli.NewBoolFlagP("use", "u", false, "Activate installed version after install"),
 		},
@@ -141,7 +141,7 @@ func main() {
 		Name:        "remove",
 		Aliases:     []string{"rm"},
 		Description: "Remove a Node version",
-		Usage:       "(rm|remove) <VERSION>",
+		Usage:       "nvm {rm,remove} <VERSION>",
 		Run: func(args cli.Args, flags map[string]cli.Flag) error {
 			version := args.Get(0)
 
@@ -184,6 +184,112 @@ func main() {
 			if path.Dir(boundVersionPath) == versionPath {
 				os.RemoveAll(c.BinPath())
 				fmt.Printf("Node %s was active and has been removed. Run `nvm use <VERSION>` to activate another\n", entry.Version)
+			}
+
+			return nil
+		},
+	})
+
+	c.AddCommand(&cli.Command{
+		Name:        "use",
+		Description: "Activate a version",
+		Usage:       "nvm use <VERSION>",
+		Run: func(args cli.Args, flags map[string]cli.Flag) error {
+			version := args.Get(0)
+			if version == "" {
+				return cli.ExitCodeUsage
+			}
+
+			if !strings.HasPrefix(version, "v") {
+				version = "v" + version
+			}
+
+			idx, err := node.GetLocalIndex(c.VersionsDirPath())
+			if err != nil {
+				return cli.ExitCodeIOErr
+			}
+
+			var entry *node.IndexEntry
+			for _, e := range idx {
+				if strings.HasPrefix(e.Version, version) {
+					entry = &e
+					break
+				}
+			}
+
+			if entry == nil {
+				return cli.ExitCodeUsage
+			}
+
+			if !strings.HasPrefix(version, "v") {
+				version = "v" + version
+			}
+
+			if err := os.RemoveAll(c.BinPath()); err != nil {
+				return cli.ExitCodeIOErr
+			}
+
+			if err := os.Symlink(path.Join(c.VersionsDirPath(), entry.Version, "bin"), c.BinPath()); err != nil {
+				return cli.ExitCodeIOErr
+			}
+
+			return nil
+		},
+	})
+
+	c.AddCommand(&cli.Command{
+		Name:        "list",
+		Aliases:     []string{"ls"},
+		Description: "List Node versions",
+		Usage:       "nvm {ls,list} [-r,--remote]",
+		Flags: []cli.Flag{
+			cli.NewBoolFlagP("remote", "r", false, "List versions in remote index"),
+		},
+		Run: func(args cli.Args, flags map[string]cli.Flag) error {
+			var idx []node.IndexEntry
+
+			if flags["remote"].Value().Get().(bool) {
+				ridx, err := node.GetRemoteIndex()
+				if err != nil {
+					return cli.ExitCodeUnavailable
+				}
+				idx = ridx
+			} else {
+				lidx, err := node.GetLocalIndex(c.VersionsDirPath())
+				if err != nil {
+					return cli.ExitCodeIOErr
+				}
+				idx = lidx
+			}
+
+			activeVersion, err := os.Readlink(c.BinPath())
+			if err != nil {
+				return cli.ExitCodeIOErr
+			}
+
+			activeVersion = path.Base(path.Dir(activeVersion))
+
+			// TODO: some way of mapping local versions to LTS names
+			// until then, use lts won't be supported
+			for i := len(idx) - 1; i >= 0; i-- {
+				entry := idx[i]
+				if entry.Version == activeVersion {
+					fmt.Printf("\x1b[32m->%13s", entry.Version)
+				} else {
+					fmt.Printf("%15s", entry.Version)
+				}
+
+				isLatestLTS := entry.LTS != "" && idx[max(i-1, 0)].LTS == ""
+
+				if entry.LTS != "" {
+					if isLatestLTS {
+						fmt.Printf("\x1b[1;32m  (Latest LTS: %s)\x1b[0m", entry.LTS)
+					} else {
+						fmt.Printf("  (LTS: %s)", entry.LTS)
+					}
+				}
+
+				fmt.Print("\x1b[0m\n")
 			}
 
 			return nil

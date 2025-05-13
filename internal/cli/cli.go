@@ -152,7 +152,7 @@ func (cmd *Command) exec(args []string) {
 			if !found {
 				fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m invalid option: %s\n\n", arg)
 				cmd.printUsage()
-				os.Exit(64)
+				os.Exit(ExitCodeUsage.Code())
 			}
 		}
 	}
@@ -171,9 +171,12 @@ func (cmd *Command) exec(args []string) {
 			fmt.Fprintln(os.Stderr, "\x1b[1;31mError:\x1b[0m", err)
 			var exitErr ExitCode
 			if errors.As(err, &exitErr) {
+				if exitErr == ExitCodeUsage {
+					fmt.Print("\n")
+					cmd.printUsage()
+				}
 				os.Exit(exitErr.Code())
 			} else {
-				fmt.Println("hello?")
 				os.Exit(ExitCodeSoftware.Code())
 			}
 		}
@@ -289,6 +292,7 @@ func (c *Cli) Exec() {
 
 	if len(args) == 0 {
 		c.RootCmd.printUsage()
+		os.Exit(ExitCodeUsage.Code())
 		return
 	}
 

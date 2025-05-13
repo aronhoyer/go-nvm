@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -63,6 +65,30 @@ func GetLocalIndex(idxPath string) ([]IndexEntry, error) {
 	for _, entry := range entries {
 		idxEntries = append(idxEntries, IndexEntry{Version: entry.Name()})
 	}
+
+	slices.SortFunc(idxEntries, func(a, b IndexEntry) int {
+		// just to cover all cases. this should never happen (tm)
+		if a.Version == b.Version {
+			return 0
+		}
+
+		av := strings.SplitN(strings.TrimPrefix(a.Version, "v"), ".", 3)
+		bv := strings.SplitN(strings.TrimPrefix(b.Version, "v"), ".", 3)
+
+		amaj, _ := strconv.Atoi(av[0])
+		amin, _ := strconv.Atoi(av[1])
+		ap, _ := strconv.Atoi(av[2])
+
+		bmaj, _ := strconv.Atoi(bv[0])
+		bmin, _ := strconv.Atoi(bv[1])
+		bp, _ := strconv.Atoi(bv[2])
+
+		if amaj > bmaj || amin > bmin || ap > bp {
+			return -1
+		} else {
+			return 1
+		}
+	})
 
 	return idxEntries, nil
 }
