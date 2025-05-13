@@ -16,7 +16,7 @@ func Install(version string) error {
 	fmt.Printf("Installing Node %s...\n", version)
 
 	fmt.Printf("Downloading %s artifact...\n", version)
-	artifact, err := DownloadArtifact(version)
+	artifact, err := DownloadArtifact(version, "")
 	if err != nil {
 		return err
 	}

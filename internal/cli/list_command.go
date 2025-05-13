@@ -20,7 +20,7 @@ func (cli *Cli) ListCommand(args []string) error {
 			idx, err = node.GetRemoteIndex()
 		}
 	} else {
-		idx, err = node.GetLocalIndex()
+		idx, err = node.GetLocalIndex(cli.VersionsDirPath())
 	}
 
 	if err != nil {

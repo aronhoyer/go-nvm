@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
-	"runtime"
 	"strings"
 )
 
@@ -17,13 +17,8 @@ type Artifact struct {
 	Name, Slug, Ext string
 }
 
-func DownloadArtifact(v string) (Artifact, error) {
-	slug, err := getSlug(v)
-	if err != nil {
-		return Artifact{}, err
-	}
-
-	u, err := url.JoinPath("https://nodejs.org/dist", v, slug)
+func DownloadArtifact(v, s string) (Artifact, error) {
+	u, err := url.JoinPath("https://nodejs.org/dist", v, s)
 	if err != nil {
 		return Artifact{}, err
 	}
@@ -34,12 +29,12 @@ func DownloadArtifact(v string) (Artifact, error) {
 	}
 
 	if r.StatusCode >= 400 {
-		return Artifact{}, fmt.Errorf("failed to download artifact %s: request failed with status %s", slug, r.Status)
+		return Artifact{}, fmt.Errorf("failed to download artifact %s: request failed with status %s", s, r.Status)
 	}
 
 	defer r.Body.Close()
 
-	f, err := os.Create(path.Join(os.TempDir(), slug))
+	f, err := os.Create(path.Join(os.TempDir(), s))
 	if err != nil {
 		return Artifact{}, err
 	}
@@ -50,69 +45,43 @@ func DownloadArtifact(v string) (Artifact, error) {
 		return Artifact{}, err
 	}
 
-	return Artifact{f.Name(), slug, path.Ext(f.Name())}, nil
+	return Artifact{f.Name(), s, path.Ext(f.Name())}, nil
 }
 
-func getSlug(v string) (string, error) {
-	var (
-		ops  = runtime.GOOS
-		arch string
-		ext  string
-	)
-
-	switch runtime.GOARCH {
-	case "386":
-		arch = "x86"
-	case "amd64":
-		arch = "x64"
-	case "arm":
-		arch = "armv7l"
-	}
-
-	switch ops {
-	case "aix", "darwin":
-		ext = ".tar.gz"
-	case "linux":
-		switch arch {
-		case "arm64", "armv7l", "ppc64le", "s390x", "x64":
-			break
-		default:
-			return "", fmt.Errorf("not supported: %s/%s", ops, arch)
-		}
-
-		ext = ".tar.gz"
-	case "windows":
-		ops = "win"
-		ext = ".zip"
-	default:
-		return "", fmt.Errorf("%s not supported", ops)
-	}
-
-	return fmt.Sprintf("node-%s-%s-%s%s", v, ops, arch, ext), nil
+func ArtifactSlug(v, hostOS, hostArch, ext string) string {
+	return fmt.Sprintf("node-%s-%s-%s%s", v, hostOS, hostArch, ext)
 }
 
 func ExtractArtifact(src, dst string) error {
+	var err error
+
 	switch ext := path.Ext(src); ext {
+	case ".xz": // assume .tar.xz
+		err = extractXZArtifact(src, dst)
 	case ".gz": // just assume .tar.gz
-		if err := extractGzipArtifact(src, dst); err != nil {
-			if err := os.Remove(dst); err != nil {
-				return err
-			}
-
-			return err
-		}
+		err = extractGzipArtifact(src, dst)
 	case ".zip":
-		if err := extractZipArtifact(src, dst); err != nil {
-			if err := os.Remove(dst); err != nil {
-				return err
-			}
-
-			return err
-		}
+		err = extractZipArtifact(src, dst)
 	default:
 		return fmt.Errorf("compression algorithm %s not supported", ext)
 	}
 
+	if err != nil {
+		if err := os.Remove(dst); err != nil {
+			return err
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+func extractXZArtifact(src, dst string) error {
+	cmd := exec.Command("tar", "-C", dst, "-xJf", src, "--strip-components=1")
+	if err := cmd.Run(); err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -154,17 +154,17 @@ func (cmd *Command) exec(args []string) {
 				cmd.printUsage()
 				os.Exit(64)
 			}
-		} else {
-			for _, flag := range cmd.Flags {
-				long, _ := flag.Name()
-				if _, ok := flags[long]; !ok {
-					flags[long] = flag
-				}
-			}
-
-			remaining = append(remaining, arg)
 		}
 	}
+
+	for _, flag := range cmd.Flags {
+		long, _ := flag.Name()
+		if _, ok := flags[long]; !ok {
+			flags[long] = flag
+		}
+	}
+
+	remaining = append(remaining, arg)
 
 	if cmd.Run != nil {
 		if err := cmd.Run(args, flags); err != nil {
@@ -293,7 +293,7 @@ func (c *Cli) Exec() {
 	}
 
 	if args[0] == "-V" || args[0] == "--version" {
-		fmt.Printf("%s %s\n", c.RootCmd.Name, c.RootCmd.Version)
+		fmt.Println(c.RootCmd.Version)
 		return
 	}
 
