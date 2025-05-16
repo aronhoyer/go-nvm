@@ -86,26 +86,32 @@ type Command struct {
 	Flags       []Flag
 	Commands    []*Command
 	Run         func(args Args, flags map[string]Flag) error
+
+	parent *Command
+}
+
+func (cmd *Command) isRoot() bool {
+	return cmd.parent == nil
 }
 
 func (cmd *Command) exec(args []string) {
-	var hasHelpFlag bool
-
-	for _, flag := range cmd.Flags {
-		long, _ := flag.Name()
-		if long == "help" {
-			hasHelpFlag = true
-			break
-		}
+	if cmd.isRoot() {
+		cmd.Flags = append(cmd.Flags, NewBoolFlagP("version", "V", false, "Print version"))
+		// TODO: could add help command
 	}
 
-	if !hasHelpFlag {
-		cmd.Flags = append(cmd.Flags, NewBoolFlagP("help", "h", false, "Print help"))
-	}
+	cmd.Flags = append(cmd.Flags, NewBoolFlagP("help", "h", false, "Print help"))
 
 	var arg string
+
 	if len(args) > 0 {
 		arg = args[0]
+	} else {
+		if cmd.isRoot() && len(cmd.Commands) > 0 {
+			fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m a command is required\n\n")
+			cmd.printUsage()
+			os.Exit(ExitCodeUsage.Code())
+		}
 	}
 
 	switch arg {
@@ -117,6 +123,7 @@ func (cmd *Command) exec(args []string) {
 		return
 	default:
 		for _, sub := range cmd.Commands {
+			sub.parent = cmd
 			if sub.Name == arg || slices.Contains(sub.Aliases, arg) {
 				sub.exec(args[1:])
 				return
@@ -124,67 +131,78 @@ func (cmd *Command) exec(args []string) {
 		}
 	}
 
-	flags := make(map[string]Flag)
+	remainingArgs, flags, err := cmd.parseArgs(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m %s\n\n", err.Error())
+
+		var exErr ExitCode
+		if errors.As(err, &exErr) {
+			defer os.Exit(exErr.Code())
+		} else {
+			defer os.Exit(ExitCodeSoftware.Code())
+		}
+
+		return
+	}
+
+	if cmd.Run != nil {
+		if err := cmd.Run(remainingArgs, flags); err != nil {
+			var exErr ExitCode
+			if errors.As(err, &exErr) {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(exErr.Code())
+			}
+		}
+	} else if remainingArgs.Get(0) == "" {
+		fmt.Println("unknown command:", remainingArgs.Get(0))
+	}
+}
+
+func (cmd *Command) parseArgs(args []string) (Args, map[string]Flag, error) {
 	var remaining Args
+	flags := make(map[string]Flag)
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		if !strings.HasPrefix(arg, "-") {
+			remaining = append(remaining, arg)
+			args = slices.Concat(args[:i], args[i+1:])
+			i++
+		}
+	}
 
 	for _, arg := range args {
-		if len(arg) > 1 && arg[0] == '-' {
-			var found bool
+		found := false
 
-			for i := range len(cmd.Flags) - 1 {
-				flag := cmd.Flags[i]
-				long, short := flag.Name()
-				if arg == "--"+long || arg == "-"+short {
-					switch flag.Value().Get().(type) {
-					case bool:
-						if err := flag.Value().Set("true"); err != nil {
-							fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m invalid boolean argument for -%s, --%s\n", short, long)
-							os.Exit(64)
-						}
+		for _, flag := range cmd.Flags {
+			long, short := flag.Name()
 
-						flags[long] = flag
-					}
+			if arg == "--"+long || arg == "-"+short {
+				found = true
 
-					found = true
+				switch flag.Value().Get().(type) {
+				case bool:
+					// BoolFlag.Set() calls PaseBool and ParseBool("true") should (tm) never error
+					flag.Value().Set("true")
 				}
 			}
+		}
 
-			if !found {
-				fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m invalid option: %s\n\n", arg)
-				cmd.printUsage()
-				os.Exit(ExitCodeUsage.Code())
-			}
+		if !found {
+			return nil, nil, fmt.Errorf("%w: invalid flag: %s", ExitCodeUsage, arg)
 		}
 	}
 
 	for _, flag := range cmd.Flags {
 		long, _ := flag.Name()
+
 		if _, ok := flags[long]; !ok {
 			flags[long] = flag
 		}
 	}
 
-	remaining = append(remaining, arg)
-
-	if cmd.Run != nil {
-		if err := cmd.Run(args, flags); err != nil {
-			fmt.Fprintln(os.Stderr, "\x1b[1;31mError:\x1b[0m", err)
-			var exitErr ExitCode
-			if errors.As(err, &exitErr) {
-				if exitErr == ExitCodeUsage {
-					fmt.Print("\n")
-					cmd.printUsage()
-				}
-				os.Exit(exitErr.Code())
-			} else {
-				os.Exit(ExitCodeSoftware.Code())
-			}
-		}
-	} else if arg != "" {
-		fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m invalid command: %s\n\n", arg)
-		cmd.printUsage()
-		os.Exit(ExitCodeUsage.Code())
-	}
+	return remaining, flags, nil
 }
 
 func (cmd *Command) printUsage() {
@@ -285,23 +303,7 @@ func (c *Cli) VersionsDirPath() string {
 }
 
 func (c *Cli) Exec() {
-	c.RootCmd.Flags = append(c.RootCmd.Flags, NewBoolFlagP("help", "h", false, "Print help"))
-	c.RootCmd.Flags = append(c.RootCmd.Flags, NewBoolFlagP("version", "V", false, "Print version"))
-
-	args := os.Args[1:]
-
-	if len(args) == 0 {
-		c.RootCmd.printUsage()
-		os.Exit(ExitCodeUsage.Code())
-		return
-	}
-
-	if args[0] == "-V" || args[0] == "--version" {
-		fmt.Println(c.RootCmd.Version)
-		return
-	}
-
-	c.RootCmd.exec(args)
+	c.RootCmd.exec(os.Args[1:])
 }
 
 func (c *Cli) AddCommand(cmd *Command) {
