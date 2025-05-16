@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path"
 	"strings"
@@ -54,7 +58,8 @@ func main() {
 
 			var entry *node.IndexEntry
 
-			switch v := args.Get(0); v {
+			version := args.Get(0)
+			switch version {
 			case "", "latest":
 				entry = &(idx[0])
 			case "lts":
@@ -65,12 +70,12 @@ func main() {
 					}
 				}
 			default:
-				if !strings.HasPrefix(v, "v") {
-					v = "v" + v
+				if !strings.HasPrefix(version, "v") {
+					version = "v" + version
 				}
 
 				for _, e := range idx {
-					if strings.HasPrefix(e.Version, v) {
+					if versionsMatcheEager(version, e.Version) {
 						entry = &e
 						break
 					}
@@ -78,7 +83,7 @@ func main() {
 			}
 
 			if entry == nil {
-				return fmt.Errorf("%w: no such version: %s", cli.ExitCodeUsage, args.Get(0))
+				return fmt.Errorf("%w: no such version: %s", cli.ExitCodeUsage, version)
 			}
 
 			idx, err = node.GetLocalIndex(c.VersionsDirPath())
@@ -196,9 +201,32 @@ func main() {
 		Usage:       "nvm use <VERSION>",
 		Run: func(args cli.Args, flags map[string]cli.Flag) error {
 			version := args.Get(0)
+
 			if version == "" {
-				return cli.ExitCodeUsage
+				wd, err := os.Getwd()
+				if err != nil {
+					return cli.ExitCodeSoftware
+				}
+
+				nvmrc := path.Join(wd, ".nvmrc")
+				f, err := os.Open(nvmrc)
+				if err != nil {
+					if errors.Is(err, fs.ErrNotExist) {
+						return fmt.Errorf("%w: no .nvmrc in current directory", cli.ExitCodeUsage)
+					}
+
+					return fmt.Errorf("%w: failed to open %s", cli.ExitCodeIOErr, nvmrc)
+				}
+
+				b, err := io.ReadAll(f)
+				if err != nil {
+					return fmt.Errorf("%w: failed to read %s", cli.ExitCodeIOErr, nvmrc)
+				}
+
+				version = string(bytes.TrimSpace(b))
 			}
+
+			// TODO: check if version already linked?
 
 			if !strings.HasPrefix(version, "v") {
 				version = "v" + version
@@ -206,7 +234,7 @@ func main() {
 
 			idx, err := node.GetLocalIndex(c.VersionsDirPath())
 			if err != nil {
-				return cli.ExitCodeIOErr
+				return fmt.Errorf("%w: failed to read local index", cli.ExitCodeIOErr)
 			}
 
 			var entry *node.IndexEntry
@@ -218,7 +246,7 @@ func main() {
 			}
 
 			if entry == nil {
-				return cli.ExitCodeUsage
+				return fmt.Errorf("%w: no such version: %s", cli.ExitCodeUsage, version)
 			}
 
 			if !strings.HasPrefix(version, "v") {
@@ -226,11 +254,11 @@ func main() {
 			}
 
 			if err := os.RemoveAll(c.BinPath()); err != nil {
-				return cli.ExitCodeIOErr
+				return fmt.Errorf("%w: failed to remove existing bin", cli.ExitCodeIOErr)
 			}
 
 			if err := os.Symlink(path.Join(c.VersionsDirPath(), entry.Version, "bin"), c.BinPath()); err != nil {
-				return cli.ExitCodeIOErr
+				return fmt.Errorf("%w: failed to symlink version %s", cli.ExitCodeIOErr, version)
 			}
 
 			return nil
@@ -297,4 +325,44 @@ func main() {
 	})
 
 	c.Exec()
+}
+
+func parseVersion(v string) (major, minor, patch string) {
+	v = strings.TrimPrefix(v, "v")
+	p := strings.Split(v, ".")
+
+	if len(p) == 0 || len(p) > 3 {
+		return
+	}
+
+	major = p[0]
+
+	if len(p) > 1 {
+		minor = p[1]
+	}
+
+	if len(p) > 2 {
+		patch = p[2]
+	}
+
+	return
+}
+
+func versionsMatcheEager(a, b string) bool {
+	rmaj, rmin, rpatch := parseVersion(a)
+	emaj, emin, epatch := parseVersion(b)
+
+	if rmaj != emaj {
+		return false
+	}
+
+	if rmin != "" && rmin != emin {
+		return false
+	}
+
+	if rpatch != "" && rpatch != epatch {
+		return false
+	}
+
+	return true
 }
