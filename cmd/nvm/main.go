@@ -56,6 +56,32 @@ func main() {
 				return fmt.Errorf("%w: unable to retrieve node distribution index: %s", cli.ExitCodeUnavailable, err)
 			}
 
+			// store index of latest lts versions
+			// this gets overwritten every time because we don't know when a new node version gets released
+			// (we probably could but i can't be assed)
+			ltsDir := path.Join(c.RootPath(), "lts")
+			os.MkdirAll(ltsDir, 0o755)
+			var latestLTS string
+
+			// FIXME: idx[0] could be an LTS
+			for i := 1; i < len(idx); i++ {
+				e := idx[i]
+				if e.LTS != "" && idx[i-1].LTS == "" {
+					p := path.Join(ltsDir, strings.ToLower(e.LTS))
+					err := os.WriteFile(p, []byte(e.Version), 0o644)
+					if err != nil {
+						return fmt.Errorf("%w: unable to write to %s: %s", cli.ExitCodeIOErr, p, err)
+					}
+
+					if latestLTS == "" {
+						latestLTS = p
+					}
+				}
+			}
+
+			// store pointer to latest lts
+			platform.SymlinkForce(latestLTS, path.Join(ltsDir, "latest"))
+
 			var entry *node.IndexEntry
 
 			version := args.Get(0)
