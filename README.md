@@ -3,11 +3,19 @@
 
 ## Installation
 
-Just build it from source (requires Go).
+> [!IMPORTANT]
+> The install script requires you have [`jq`](https://github.com/jqlang/jq) installed and in your $PATH
+
+Navigate to the releases and download the artifact corresponding to your operating system and CPU architecture.
+
+If you're on Linux or macOS, you have the luxury of running the install script:
 
 ```sh
-git clone https://github.com/aronhoyer/go-nvm.git && cd go-nvm
-go build -o $HOME/.go-nvm/nvm ./cmd/nvm
-cp ./env.sh $HOME/.go-nvm/env
-chmod +x $HOME/.go-nvm/env
+curl -s https://raw.githubusercontent.com/aronhoyer/go-nvm/refs/heads/main/install.sh | bash
+```
+
+If you want to install the latest pre-release version, you can run
+
+```sh
+curl -s https://raw.githubusercontent.com/aronhoyer/go-nvm/refs/heads/main/install.sh | bash -s -- --unstable
 ```
