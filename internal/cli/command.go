@@ -8,9 +8,10 @@ import (
 	"strings"
 )
 
+var Version func()
+
 type Command struct {
 	Name        string
-	Version     string
 	Aliases     []string
 	Description string
 	Usage       string
@@ -27,42 +28,43 @@ func (cmd *Command) isRoot() bool {
 
 func (cmd *Command) exec(args []string) {
 	if cmd.isRoot() {
-		cmd.Flags = append(cmd.Flags, NewBoolFlagP("version", "V", false, "Print version"))
+		if Version != nil {
+			cmd.Flags = append(cmd.Flags, NewBoolFlagP("version", "V", false, "Print version"))
+		}
 		// TODO: could add help command
 	}
 
 	cmd.Flags = append(cmd.Flags, NewBoolFlagP("help", "h", false, "Print help"))
 
-	var arg string
+	parsedArgs, flags, err := cmd.parseArgs(args)
 
-	if len(args) > 0 {
-		arg = args[0]
-	} else {
-		if cmd.isRoot() && len(cmd.Commands) > 0 {
-			fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m a command is required\n\n")
-			cmd.printUsage()
-			os.Exit(ExitCodeUsage.Code())
-		}
+	if cmd.isRoot() && len(parsedArgs) > 0 && parsedArgs.Get(0) == "" {
+		fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m a command is required\n\n")
+		cmd.printUsage()
+		os.Exit(ExitCodeUsage.Code())
 	}
 
-	switch arg {
-	case "-h", "--help":
+	if flags.GetBool("help") {
 		if cmd.Description != "" {
 			fmt.Println(cmd.Description + "\n")
 		}
 		cmd.printUsage()
 		return
-	default:
-		for _, sub := range cmd.Commands {
-			sub.parent = cmd
-			if sub.Name == arg || slices.Contains(sub.Aliases, arg) {
-				sub.exec(args[1:])
-				return
-			}
+	}
+
+	if flags.GetBool("version") && Version != nil {
+		Version()
+		return
+	}
+
+	for _, sub := range cmd.Commands {
+		sub.parent = cmd
+		if sub.Name == parsedArgs.Get(0) || slices.Contains(sub.Aliases, parsedArgs.Get(0)) {
+			sub.exec(args[1:])
+			return
 		}
 	}
 
-	remainingArgs, flags, err := cmd.parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m %s\n\n", err.Error())
 
@@ -77,15 +79,16 @@ func (cmd *Command) exec(args []string) {
 	}
 
 	if cmd.Run != nil {
-		if err := cmd.Run(remainingArgs, flags); err != nil {
+		if err := cmd.Run(parsedArgs, flags); err != nil {
 			var exErr ExitCode
 			if errors.As(err, &exErr) {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(exErr.Code())
 			}
 		}
-	} else if remainingArgs.Get(0) == "" {
-		fmt.Println("unknown command:", remainingArgs.Get(0))
+	} else if len(parsedArgs) > 0 {
+		fmt.Printf("\x1b[1;31mError:\x1b[0m unknown command: %q\n", parsedArgs.Get(0))
+		os.Exit(ExitCodeUsage.Code())
 	}
 }
 

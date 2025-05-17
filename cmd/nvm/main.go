@@ -16,9 +16,11 @@ import (
 	"github.com/aronhoyer/go-nvm/internal/platform"
 )
 
-const VERSION string = "v1.0.0-alpha"
-
-var nvmDirPath string
+var (
+	nvmDirPath string
+	commitSha  string
+	version    = "dev"
+)
 
 func init() {
 	if nvmDirPath = os.Getenv("NVMDIR"); nvmDirPath == "" {
@@ -34,12 +36,15 @@ func init() {
 		fmt.Fprintln(os.Stderr, "\x1b[1;31mError:\x1b[0m", err)
 		os.Exit(cli.ExitCodeIOErr.Code())
 	}
+
+	cli.Version = func() {
+		fmt.Printf("%s (%s)\n", version, commitSha)
+	}
 }
 
 func main() {
 	c := cli.New(nvmDirPath, &cli.Command{
 		Name:        "nvm",
-		Version:     VERSION,
 		Description: "Manage Node.js versions",
 	})
 
