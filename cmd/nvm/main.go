@@ -104,7 +104,6 @@ func main() {
 						return fmt.Errorf("%w: unable to read lts file: %s", cli.ExitCodeIOErr, err)
 					}
 					version = string(b)
-					fmt.Println(version)
 				} else {
 					if !strings.HasPrefix(version, "v") {
 						version = "v" + version
