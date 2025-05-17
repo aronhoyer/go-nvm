@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/aronhoyer/go-nvm/internal/cli"
@@ -57,54 +58,68 @@ func main() {
 			}
 
 			// store index of latest lts versions
-			// this gets overwritten every time because we don't know when a new node version gets released
-			// (we probably could but i can't be assed)
+			// this gets written on every install, cause i can't be assed to cache bust
 			ltsDir := path.Join(c.RootPath(), "lts")
 			os.MkdirAll(ltsDir, 0o755)
-			var latestLTS string
 
-			// FIXME: idx[0] could be an LTS
-			for i := 1; i < len(idx); i++ {
-				e := idx[i]
-				if e.LTS != "" && idx[i-1].LTS == "" {
-					p := path.Join(ltsDir, strings.ToLower(e.LTS))
-					err := os.WriteFile(p, []byte(e.Version), 0o644)
-					if err != nil {
-						return fmt.Errorf("%w: unable to write to %s: %s", cli.ExitCodeIOErr, p, err)
+			latestLTSPath := ""
+			writtenLTS := make(map[string]bool)
+
+			for _, e := range idx {
+				ltsName := strings.ToLower(e.LTS)
+				if _, ok := writtenLTS[ltsName]; e.LTS != "" && !ok {
+					p := path.Join(ltsDir, ltsName)
+					if err := os.WriteFile(p, []byte(e.Version), 0o644); err != nil {
+						return fmt.Errorf("%w: unable to write lts file: %s", cli.ExitCodeIOErr, err)
 					}
 
-					if latestLTS == "" {
-						latestLTS = p
+					if latestLTSPath == "" {
+						latestLTSPath = p
+					}
+
+					writtenLTS[ltsName] = true
+				}
+			}
+
+			if err := platform.SymlinkForce(latestLTSPath, path.Join(ltsDir, "latest")); err != nil {
+				return fmt.Errorf("%w: unable to symlink latest lts: %s", cli.ExitCodeIOErr, err)
+			}
+
+			version := strings.ToLower(args.Get(0))
+
+			switch version {
+			case "", "latest":
+				version = idx[0].Version
+			case "lts":
+				b, err := os.ReadFile(latestLTSPath)
+				if err != nil {
+					return fmt.Errorf("%w: unable to read latest lts: %s", cli.ExitCodeIOErr, err)
+				}
+				version = string(b)
+			default:
+				// try reading lts file if we can't parse version
+				if _, _, _, err := parseVersion(version); err != nil {
+					b, err := os.ReadFile(path.Join(ltsDir, version))
+					if err != nil {
+						return fmt.Errorf("%w: unable to read lts file: %s", cli.ExitCodeIOErr, err)
+					}
+					version = string(b)
+					fmt.Println(version)
+				} else {
+					if !strings.HasPrefix(version, "v") {
+						version = "v" + version
 					}
 				}
 			}
 
-			// store pointer to latest lts
-			platform.SymlinkForce(latestLTS, path.Join(ltsDir, "latest"))
-
 			var entry *node.IndexEntry
 
-			version := args.Get(0)
-			switch version {
-			case "", "latest":
-				entry = &(idx[0])
-			case "lts":
-				for _, e := range idx {
-					if e.LTS != "" {
-						entry = &e
-						break
-					}
-				}
-			default:
-				if !strings.HasPrefix(version, "v") {
-					version = "v" + version
-				}
-
-				for _, e := range idx {
-					if versionsMatcheEager(version, e.Version) {
-						entry = &e
-						break
-					}
+			// linear search because it's more likely that you'd wanna install a newer version rather than an
+			// old version
+			for _, e := range idx {
+				if versionsMatcheEager(version, e.Version) {
+					entry = &e
+					break
 				}
 			}
 
@@ -353,11 +368,20 @@ func main() {
 	c.Exec()
 }
 
-func parseVersion(v string) (major, minor, patch string) {
+var ErrVersionNumber = errors.New("invalid version number")
+
+func parseVersion(v string) (major, minor, patch string, err error) {
+	reg := regexp.MustCompile(`\d+(\.\d+)*`)
+	if !reg.MatchString(v) {
+		err = fmt.Errorf("%w: %s", ErrVersionNumber, v)
+		return
+	}
+
 	v = strings.TrimPrefix(v, "v")
 	p := strings.Split(v, ".")
 
 	if len(p) == 0 || len(p) > 3 {
+		err = fmt.Errorf("%w: %s", ErrVersionNumber, v)
 		return
 	}
 
@@ -375,8 +399,8 @@ func parseVersion(v string) (major, minor, patch string) {
 }
 
 func versionsMatcheEager(a, b string) bool {
-	rmaj, rmin, rpatch := parseVersion(a)
-	emaj, emin, epatch := parseVersion(b)
+	rmaj, rmin, rpatch, _ := parseVersion(a)
+	emaj, emin, epatch, _ := parseVersion(b)
 
 	if rmaj != emaj {
 		return false
