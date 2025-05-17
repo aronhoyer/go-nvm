@@ -51,7 +51,7 @@ func main() {
 		Flags: []cli.Flag{
 			cli.NewBoolFlagP("use", "u", false, "Activate installed version after install"),
 		},
-		Run: func(args cli.Args, flags map[string]cli.Flag) error {
+		Run: func(args cli.Args, flags cli.FlagSet) error {
 			idx, err := node.GetRemoteIndex()
 			if err != nil {
 				return fmt.Errorf("%w: unable to retrieve node distribution index: %s", cli.ExitCodeUnavailable, err)
@@ -168,7 +168,7 @@ func main() {
 				return fmt.Errorf("%w: failed to extract artifact %s", cli.ExitCodeSoftware, artifact.Name)
 			}
 
-			if len(idx) == 0 || flags["use"].Value().Get().(bool) {
+			if len(idx) == 0 || flags.GetBool("use") {
 				if err := os.RemoveAll(c.BinPath()); err != nil {
 					return fmt.Errorf("%w: failed to delete %s", cli.ExitCodeIOErr, c.BinPath())
 				}
@@ -188,7 +188,7 @@ func main() {
 		Aliases:     []string{"rm"},
 		Description: "Remove a Node version",
 		Usage:       "nvm {rm,remove} <VERSION>",
-		Run: func(args cli.Args, flags map[string]cli.Flag) error {
+		Run: func(args cli.Args, flags cli.FlagSet) error {
 			version := args.Get(0)
 
 			if version == "" {
@@ -240,7 +240,7 @@ func main() {
 		Name:        "use",
 		Description: "Activate a version",
 		Usage:       "nvm use <VERSION>",
-		Run: func(args cli.Args, flags map[string]cli.Flag) error {
+		Run: func(args cli.Args, flags cli.FlagSet) error {
 			version := args.Get(0)
 
 			if version == "" {
@@ -314,10 +314,10 @@ func main() {
 		Flags: []cli.Flag{
 			cli.NewBoolFlagP("remote", "r", false, "List versions in remote index"),
 		},
-		Run: func(args cli.Args, flags map[string]cli.Flag) error {
+		Run: func(args cli.Args, flags cli.FlagSet) error {
 			var idx []node.IndexEntry
 
-			if flags["remote"].Value().Get().(bool) {
+			if flags.GetBool("remote") {
 				ridx, err := node.GetRemoteIndex()
 				if err != nil {
 					return cli.ExitCodeUnavailable
