@@ -1,6 +1,4 @@
-#!/usr/bin/bash
-
-export NVMDIR="${NVMDIR:-$HOME/.go-nvm}"
+export NVMDIR="${NVMDIR:-$HOME/.nvm}"
 export NVMBIN="$NVMDIR/bin"
 
 case ":${PATH}:" in
