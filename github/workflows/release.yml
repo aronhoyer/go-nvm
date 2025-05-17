@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Extract version and commit
+        id: vars
+        run: |
+          VERSION="${GITHUB_REF##*/}"
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "COMMIT_SHA=$COMMIT" >> $GITHUB_ENV
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p out
+          output_name="nvm"
+          if [ "$GOOS" = "windows" ]; then
+            output_name="nvm.exe"
+          fi
+
+          build_dir="nvm-${GOOS}-${GOARCH}"
+          mkdir -p "$build_dir"
+
+          # Build the binary with injected version info
+          GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-X main.version=${VERSION} -X main.commitHash=${COMMIT_HASH}" -o "$build_dir/$output_name"
+
+          # Copy env.sh as 'env'
+          cp ./env.sh "$build_dir/env"
+
+          # Package into tar.gz
+          tar -czf "out/nvm-${GOOS}-${GOARCH}.tar.gz" -C "$build_dir" .
+
+      - name: Upload Release Archives
+        uses: softprops/action-gh-release@v1
+        with:
+          files: out/*.tar.gz
+          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-rc') || contains(github.ref, '-alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
