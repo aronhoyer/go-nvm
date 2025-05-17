@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Git tag to build (e.g., v1.0.0-alpha.1)'
+        required: true
+        type: string
+
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set Version and Checkout Tag (Manual Trigger)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          git fetch --tags
+          git checkout ${{ inputs.tag }}
+          echo "VERSION=${{ inputs.tag }}" >> $GITHUB_ENV
+
+      - name: Set Version From Push Event
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          VERSION="${GITHUB_REF##*/}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Extract Commit Hash
+        run: |
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "COMMIT_SHA=$COMMIT" >> $GITHUB_ENV
+
+      - name: Package artifacts into tar.gz
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p out
+          output_name="nvm"
+          if [ "$GOOS" = "windows" ]; then
+            output_name="nvm.exe"
+          fi
+
+          build_dir="package-${GOOS}-${GOARCH}"
+          mkdir -p "$build_dir"
+
+          GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-X main.version=${VERSION} -X main.commitSha=${COMMIT_SHA}" -o "$build_dir/$output_name" ./cmd/nvm
+
+          cp ./env.sh "$build_dir/env"
+
+          tar -czf "out/nvm-${GOOS}-${GOARCH}.tar.gz" -C "$build_dir" .
+
+      - name: Upload Release Archives
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: out/*.tar.gz
+          prerelease: ${{ contains(github.event.inputs.tag || github.ref, '-beta') || contains(github.event.inputs.tag || github.ref, '-rc') || contains(github.event.inputs.tag || github.ref, '-alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
