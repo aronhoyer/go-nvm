@@ -12,6 +12,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   release:
     name: Build and Release
@@ -70,5 +73,3 @@ jobs:
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: out/*.tar.gz
           prerelease: ${{ contains(github.event.inputs.tag || github.ref, '-beta') || contains(github.event.inputs.tag || github.ref, '-rc') || contains(github.event.inputs.tag || github.ref, '-alpha') }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
