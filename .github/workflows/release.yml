@@ -65,7 +65,11 @@ jobs:
 
           cp ./env.sh "$build_dir/env"
 
-          tar -czf "out/nvm-${GOOS}-${GOARCH}.tar.gz" -C "$build_dir" .
+          if [ "$GOOS" = "windows" ]; then
+            zip -rj "out/nvm-${GOOS}-${GOARCH}.zip" "$build_dir"/*
+          else
+            tar -czf "out/nvm-${GOOS}-${GOARCH}.tar.gz" -C "$build_dir" .
+          fi
 
       - name: Upload Release Archives
         uses: softprops/action-gh-release@v2
