@@ -1,20 +1,24 @@
 > [!NOTE]
-> This project is not associated with [nvm](https://github.com/nvm-sh/nvm) in any way. Only a pet project of mine.
+> This project is not associated with [nvm](https://github.com/nvm-sh/nvm) in any way. It is a personal project built for experimentation and learning.
 
 ## Installation
 
 > [!IMPORTANT]
-> The install script requires you have [`jq`](https://github.com/jqlang/jq) installed and in your $PATH
+> The install script requires [`jq`](https://github.com/jqlang/jq) to be installed and available in your `$PATH`.
 
-Navigate to the releases and download the artifact corresponding to your operating system and CPU architecture.
+### Manual Installation
 
-If you're on Linux or macOS, you have the luxury of running the install script:
+Navigate to the [Releases](https://github.com/aronhoyer/go-nvm/releases) page and download the artifact that matches your operating system and CPU architecture.
+
+### Scripted Installation (Linux and macOS)
+
+If you're on Linux or macOS, you can run the install script:
 
 ```sh
 curl -s https://raw.githubusercontent.com/aronhoyer/go-nvm/refs/heads/main/install.sh | bash
 ```
 
-If you want to install the latest pre-release version, you can run
+To install the latest **pre-release** version, run:
 
 ```sh
 curl -s https://raw.githubusercontent.com/aronhoyer/go-nvm/refs/heads/main/install.sh | bash -s -- --unstable
