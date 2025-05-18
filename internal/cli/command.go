@@ -38,7 +38,7 @@ func (cmd *Command) exec(args []string) {
 
 	parsedArgs, flags, err := cmd.parseArgs(args)
 
-	if cmd.isRoot() && len(parsedArgs) > 0 && parsedArgs.Get(0) == "" {
+	if cmd.isRoot() && len(cmd.Commands) > 0 && len(parsedArgs) == 0 {
 		fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m a command is required\n\n")
 		cmd.printUsage()
 		os.Exit(ExitCodeUsage.Code())
@@ -96,35 +96,28 @@ func (cmd *Command) parseArgs(args []string) (Args, FlagSet, error) {
 	var remaining Args
 	flags := make(FlagSet)
 
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-
-		if !strings.HasPrefix(arg, "-") {
-			remaining = append(remaining, arg)
-			args = slices.Concat(args[:i], args[i+1:])
-			i++
-		}
-	}
-
 	for _, arg := range args {
-		found := false
+		if strings.HasPrefix(arg, "-") {
+			found := false
 
-		for _, flag := range cmd.Flags {
-			long, short := flag.Name()
+			for _, f := range cmd.Flags {
+				long, short := f.Name()
+				if arg == "--"+long || arg == "-"+short {
+					switch f.Value().Get().(type) {
+					case bool:
+						// BoolFlag.Set() calls PaseBool and ParseBool("true") should (tm) never error
+						f.Value().Set("true")
+					}
 
-			if arg == "--"+long || arg == "-"+short {
-				found = true
-
-				switch flag.Value().Get().(type) {
-				case bool:
-					// BoolFlag.Set() calls PaseBool and ParseBool("true") should (tm) never error
-					flag.Value().Set("true")
+					found = true
 				}
 			}
-		}
 
-		if !found {
-			return nil, nil, fmt.Errorf("%w: invalid flag: %s", ExitCodeUsage, arg)
+			if !found {
+				return nil, nil, fmt.Errorf("%w: invalid flag: %s", ExitCodeUsage, arg)
+			}
+		} else {
+			remaining = append(remaining, arg)
 		}
 	}
 
