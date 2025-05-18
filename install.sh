@@ -37,7 +37,7 @@ case "$NVM_ARCH" in
 esac
 
 NVM_TAG_NAME="$(echo $NVM_LATEST_RELEASE | jq -r .tag_name)"
-NVM_ARTIFACT="$(echo "$NVM_LATEST_RELEASE" | jq -r '.assets[] | select(.name == "nvm-'"$NVM_OS"'-'"$NVM_ARCH"'.tar.gz")')"
+NVM_ARTIFACT="$(echo "$NVM_LATEST_RELEASE" | jq -r '.assets[] | select(.name == "nvm.'"$NVM_OS"'-'"$NVM_ARCH"'.tar.gz")')"
 NVM_ARTIFACT_URL="$(echo "$NVM_ARTIFACT" | jq -r .browser_download_url)"
 NVM_ARTIFACT_NAME="$(echo "$NVM_ARTIFACT" | jq -r .name)"
 
@@ -47,7 +47,7 @@ NVM_DOWNLOAD_TARGET="$(mktemp -d)"
 trap 'rm -rf $NVM_DOWNLOAD_TARGET' EXIT
 
 pushd "$NVM_DOWNLOAD_TARGET"
-curl -sLf -O "$NVM_ARTIFACT_URL"
+curl -O -sLf "$NVM_ARTIFACT_URL"
 
 if [ -d "$NVMDIR" ]; then
 	rm -rf "$NVMDIR"
