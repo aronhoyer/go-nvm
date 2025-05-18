@@ -8,10 +8,10 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 NVMDIR="${NVMDIR:-$HOME/.nvm}"
-NVMBIN="${NVMDIR}/bin"
+NVMBIN="$NVMDIR/bin"
 
 NVM_GET_UNSTABLE=1
-case "$1-" in
+case "${1:-}" in
 	--unstable) NVM_GET_UNSTABLE=0
 	;;
 esac
@@ -37,11 +37,12 @@ case "$NVM_ARCH" in
 esac
 
 NVM_TAG_NAME="$(echo $NVM_LATEST_RELEASE | jq -r .tag_name)"
-NVM_ARTIFACT="$(echo "$NVM_LATEST_RELEASE" | jq -r '.assets[] | select(.name == "nvm.'"$NVM_OS"'-'"$NVM_ARCH"'.tar.gz")')"
+NVM_RELEASE_NAME="$(echo "$NVM_LATEST_RELEASE" | jq -r .name)"
+NVM_ARTIFACT="$(echo "$NVM_LATEST_RELEASE" | jq -r '.assets[] | select(.name == "nvm-'"$NVM_OS"'-'"$NVM_ARCH"'.tar.gz")')"
 NVM_ARTIFACT_URL="$(echo "$NVM_ARTIFACT" | jq -r .browser_download_url)"
 NVM_ARTIFACT_NAME="$(echo "$NVM_ARTIFACT" | jq -r .name)"
 
-echo "Downloading $NVM_ARTIFACT_NAME ($NVM_TAG_NAME)..."
+echo "Downloading $NVM_ARTIFACT_NAME from $NVM_ARTIFACT_URL..."
 
 NVM_DOWNLOAD_TARGET="$(mktemp -d)"
 trap 'rm -rf $NVM_DOWNLOAD_TARGET' EXIT
@@ -53,7 +54,11 @@ if [ -d "$NVMDIR" ]; then
 	rm -rf "$NVMDIR"
 fi
 
-mkdir -p "$NVMDIR"
+mkdir "$NVM_RELEASE_NAME"
+tar -C "$NVM_RELEASE_NAME" -xzf "$NVM_ARTIFACT_NAME"
 
-tar -C "$NVMDIR" -xzf "$NVM_ARTIFACT_NAME"
+mkdir -p "$NVMDIR"
+cp -f "$NVM_RELEASE_NAME"/* "$NVMDIR"
 popd
+
+echo "nvm $NVM_TAG_NAME installed into $NVMDIR"

@@ -86,15 +86,15 @@ jobs:
           cp ./env.sh "$build_dir/env"
 
           if [ "$GOOS" = "windows" ]; then
-            zip -rj "out/nvm.${GOOS}-${GOARCH}.zip" "$build_dir"/*
+            zip -rj "out/nvm-${GOOS}-${GOARCH}.zip" "$build_dir"/*
           else
-            tar -czf "out/nvm.${GOOS}-${GOARCH}.tar.gz" -C "$build_dir" .
+            tar -czf "out/nvm-${GOOS}-${GOARCH}.tar.gz" -C "$build_dir" .
           fi
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nvm.${{ matrix.goos }}-${{ matrix.goarch }}
+          name: nvm-${{ matrix.goos }}-${{ matrix.goarch }}
           path: out/*
 
   release:
