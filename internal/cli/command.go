@@ -36,14 +36,29 @@ func (cmd *Command) exec(args []string) {
 
 	cmd.Flags = append(cmd.Flags, NewBoolFlagP("help", "h", false, "Print help"))
 
-	parsedArgs, flags, err := cmd.parseArgs(args)
+	var arg string
+	if len(args) > 0 {
+		arg = args[0]
+	}
 
 	for _, sub := range cmd.Commands {
 		sub.parent = cmd
-		if sub.Name == parsedArgs.Get(0) || slices.Contains(sub.Aliases, parsedArgs.Get(0)) {
+		if sub.Name == arg || slices.Contains(sub.Aliases, arg) {
 			sub.exec(args[1:])
 			return
 		}
+	}
+
+	parsedArgs, flags, err := cmd.parseArgs(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "\x1b[1;31mError:\x1b[0m", err)
+
+		var exErr ExitCode
+		if errors.As(err, &exErr) {
+			os.Exit(exErr.Code())
+		}
+
+		os.Exit(ExitCodeUnavailable.Code())
 	}
 
 	if flags.GetBool("help") {
