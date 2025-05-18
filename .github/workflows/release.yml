@@ -16,8 +16,44 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build and Release
+  prepare:
+    name: Prepare Release Context
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.set-version.outputs.version }}
+      commit: ${{ steps.set-commit.outputs.commit }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set Version and Checkout Tag (Manual Trigger)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        id: set-version-dispatch
+        run: |
+          git fetch --tags
+          git checkout ${{ inputs.tag }}
+          echo "version=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+
+      - name: Set Version and Checkout Tag (Push Event)
+        if: ${{ github.event_name == 'push' }}
+        id: set-version-push
+        run: |
+          VERSION="${GITHUB_REF##*/}"
+          git fetch --tags
+          git checkout "$VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Extract Commit Hash
+        id: set-commit
+        run: |
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+
+  build:
+    name: Build and Package (${{ matrix.goos }}-${{ matrix.goarch }})
+    needs: prepare
     runs-on: ubuntu-latest
 
     strategy:
@@ -29,28 +65,10 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set Version and Checkout Tag (Manual Trigger)
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          git fetch --tags
-          git checkout ${{ inputs.tag }}
-          echo "VERSION=${{ inputs.tag }}" >> $GITHUB_ENV
-
-      - name: Set Version From Push Event
-        if: ${{ github.event_name == 'push' }}
-        run: |
-          VERSION="${GITHUB_REF##*/}"
-          git fetch --tags
-          git checkout "$VERSION"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-      - name: Extract Commit Hash
-        run: |
-          COMMIT=$(git rev-parse --short HEAD)
-          echo "COMMIT_SHA=$COMMIT" >> $GITHUB_ENV
-
-      - name: Package artifacts into tar.gz or zip
+      - name: Build and Package
         env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          COMMIT_SHA: ${{ needs.prepare.outputs.commit }}
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
@@ -73,15 +91,35 @@ jobs:
             tar -czf "out/nvm-${GOOS}-${GOARCH}.tar.gz" -C "$build_dir" .
           fi
 
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvm.${{ matrix.goos }}-${{ matrix.goarch }}
+          path: out/*
+
+  release:
+    name: Publish GitHub Release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download All Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: out
+
+      - name: Flatten Artifact Directory
+        run: |
+          mkdir -p release
+          find out -type f -exec mv {} release/ \;
+
       - name: Upload Release Archives (Manual Trigger)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag }}
-          files: |
-            out/*.tar.gz
-            out/*.zip
-          prerelease: ${{ contains(inputs.tag, '-beta') || contains(inputs.tag, '-rc') || contains(inputs.tag, '-alpha') }}
+          tag_name: ${{ needs.prepare.outputs.version }}
+          files: release/*
+          prerelease: ${{ contains(needs.prepare.outputs.version, '-beta') || contains(needs.prepare.outputs.version, '-rc') || contains(needs.prepare.outputs.version, '-alpha') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -89,10 +127,9 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            out/*.tar.gz
-            out/*.zip
-          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-rc') || contains(github.ref, '-alpha') }}
+          tag_name: ${{ needs.prepare.outputs.version }}
+          files: release/*
+          prerelease: ${{ contains(needs.prepare.outputs.version, '-beta') || contains(needs.prepare.outputs.version, '-rc') || contains(needs.prepare.outputs.version, '-alpha') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
