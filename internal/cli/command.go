@@ -38,10 +38,12 @@ func (cmd *Command) exec(args []string) {
 
 	parsedArgs, flags, err := cmd.parseArgs(args)
 
-	if cmd.isRoot() && len(cmd.Commands) > 0 && len(parsedArgs) == 0 {
-		fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m a command is required\n\n")
-		cmd.printUsage()
-		os.Exit(ExitCodeUsage.Code())
+	for _, sub := range cmd.Commands {
+		sub.parent = cmd
+		if sub.Name == parsedArgs.Get(0) || slices.Contains(sub.Aliases, parsedArgs.Get(0)) {
+			sub.exec(args[1:])
+			return
+		}
 	}
 
 	if flags.GetBool("help") {
@@ -57,12 +59,10 @@ func (cmd *Command) exec(args []string) {
 		return
 	}
 
-	for _, sub := range cmd.Commands {
-		sub.parent = cmd
-		if sub.Name == parsedArgs.Get(0) || slices.Contains(sub.Aliases, parsedArgs.Get(0)) {
-			sub.exec(args[1:])
-			return
-		}
+	if cmd.isRoot() && len(cmd.Commands) > 0 && len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "\x1b[1;31mError:\x1b[0m a command is required\n\n")
+		cmd.printUsage()
+		os.Exit(ExitCodeUsage.Code())
 	}
 
 	if err != nil {
