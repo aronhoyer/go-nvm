@@ -19,10 +19,8 @@ esac
 NVM_LATEST_RELEASE=""
 
 if [ $NVM_GET_UNSTABLE ]; then
-	echo "Downloading latest unstable..."
 	NVM_LATEST_RELEASE="$(curl -s "https://api.github.com/repos/aronhoyer/go-nvm/releases" | jq -cr 'first')"
 else
-	echo "Downloading latest stable..."
 	NVM_LATEST_RELEASE="$(curl -s "https://api.github.com/repos/aronhoyer/go-nvm/releases/latest")"
 fi
 
