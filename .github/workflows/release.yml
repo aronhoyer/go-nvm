@@ -75,7 +75,7 @@ jobs:
           mkdir -p out
           output_name="nvm"
           if [ "$GOOS" = "windows" ]; then
-            output_name="nvm.exe"
+            output_name="nvm.exe"s
           fi
 
           build_dir="package-${GOOS}-${GOARCH}"
@@ -86,9 +86,9 @@ jobs:
           cp ./env.sh "$build_dir/env"
 
           if [ "$GOOS" = "windows" ]; then
-            zip -rj "out/nvm-${GOOS}-${GOARCH}.zip" "$build_dir"/*
+            zip -rj "out/nvm.${GOOS}-${GOARCH}.zip" "$build_dir"/*
           else
-            tar -czf "out/nvm-${GOOS}-${GOARCH}.tar.gz" -C "$build_dir" .
+            tar -czf "out/nvm.${GOOS}-${GOARCH}.tar.gz" -C "$build_dir" .
           fi
 
       - name: Upload Build Artifacts
@@ -103,6 +103,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Debug Pre-release Condition
+        run: |
+          echo "Evaluating prerelease status for version: ${{ needs.prepare.outputs.version }}"
+          echo "Pre-release: ${{ contains(needs.prepare.outputs.version, '-alpha') || contains(needs.prepare.outputs.version, '-beta') || contains(needs.prepare.outputs.version, '-rc') }}"
+
       - name: Download All Build Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -120,8 +125,6 @@ jobs:
           tag_name: ${{ needs.prepare.outputs.version }}
           files: release/*
           prerelease: ${{ contains(needs.prepare.outputs.version, '-beta') || contains(needs.prepare.outputs.version, '-rc') || contains(needs.prepare.outputs.version, '-alpha') }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Release Archives (Push Event)
         if: ${{ github.event_name == 'push' }}
@@ -130,6 +133,4 @@ jobs:
           tag_name: ${{ needs.prepare.outputs.version }}
           files: release/*
           prerelease: ${{ contains(needs.prepare.outputs.version, '-beta') || contains(needs.prepare.outputs.version, '-rc') || contains(needs.prepare.outputs.version, '-alpha') }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
