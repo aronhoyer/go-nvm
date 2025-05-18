@@ -324,20 +324,22 @@ func main() {
 			if flags.GetBool("remote") {
 				ridx, err := node.GetRemoteIndex()
 				if err != nil {
-					return cli.ExitCodeUnavailable
+					return fmt.Errorf("%w: %s", cli.ExitCodeUnavailable, err)
 				}
 				idx = ridx
 			} else {
 				lidx, err := node.GetLocalIndex(c.VersionsDirPath())
 				if err != nil {
-					return cli.ExitCodeIOErr
+					return fmt.Errorf("%w: %s", cli.ExitCodeIOErr, err)
 				}
 				idx = lidx
 			}
 
 			activeVersion, err := os.Readlink(c.BinPath())
 			if err != nil {
-				return cli.ExitCodeIOErr
+				if !errors.Is(err, fs.ErrNotExist) {
+					return fmt.Errorf("%w: %s", cli.ExitCodeIOErr, err)
+				}
 			}
 
 			activeVersion = path.Base(path.Dir(activeVersion))
