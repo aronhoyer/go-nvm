@@ -122,15 +122,19 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: softprops/action-gh-release@v2
         with:
+          name: "nvm-${{ needs.prepare.outputs.version }}"
           tag_name: ${{ needs.prepare.outputs.version }}
           files: release/*
           prerelease: ${{ contains(needs.prepare.outputs.version, '-beta') || contains(needs.prepare.outputs.version, '-rc') || contains(needs.prepare.outputs.version, '-alpha') }}
+          generate_release_notes: true
 
       - name: Upload Release Archives (Push Event)
         if: ${{ github.event_name == 'push' }}
         uses: softprops/action-gh-release@v2
         with:
+          name: "nvm-${{ needs.prepare.outputs.version }}"
           tag_name: ${{ needs.prepare.outputs.version }}
           files: release/*
           prerelease: ${{ contains(needs.prepare.outputs.version, '-beta') || contains(needs.prepare.outputs.version, '-rc') || contains(needs.prepare.outputs.version, '-alpha') }}
+          generate_release_notes: true
 
